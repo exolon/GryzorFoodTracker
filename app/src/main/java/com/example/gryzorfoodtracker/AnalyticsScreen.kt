@@ -1,0 +1,598 @@
+package com.example.gryzorfoodtracker
+
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.QuestionMark
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import kotlin.math.abs
+
+data class TagStat(
+    val tag: String,
+    val totalDays: Int,
+    val winRate: Int,
+    val avgDeficit: Int
+)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val dao = db.mealDao()
+    val today = LocalDate.now()
+    val textMeasurer = rememberTextMeasurer()
+    val haptic = LocalHapticFeedback.current
+
+    val phasePreference by context.dataStore.data
+        .map { it[PHASE_MODE_KEY] ?: "cut" }
+        .collectAsState(initial = "cut")
+
+    val (gyroPitch, gyroRoll) = rememberGyroscopeTilt()
+
+    val allMetrics by dao.getAllMetrics().collectAsState(initial = emptyList())
+    val allTags by dao.getAllTags().collectAsState(initial = emptyList())
+    val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
+
+    val currentWeekDates = remember(today) { (0..6).map { today.minusDays(it.toLong()).toString() } }
+    val prevWeekDates = remember(today) { (7..13).map { today.minusDays(it.toLong()).toString() } }
+    val last14Days = remember(today) { (13 downTo 0).map { today.minusDays(it.toLong()).toString() } } // Hoisted for PDF
+
+    val currentKcal = allMetrics.filter { currentWeekDates.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
+    val prevKcal = allMetrics.filter { prevWeekDates.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
+    val currentDef = allMetrics.filter { currentWeekDates.contains(it.date) }.mapNotNull { it.deficit.toDoubleOrNull() }
+    val prevDef = allMetrics.filter { prevWeekDates.contains(it.date) }.mapNotNull { it.deficit.toDoubleOrNull() }
+
+    val curKcalAvg = if (currentKcal.isNotEmpty()) currentKcal.average().toInt() else 0
+    val prevKcalAvg = if (prevKcal.isNotEmpty()) prevKcal.average().toInt() else 0
+    val curDefAvg = if (currentDef.isNotEmpty()) currentDef.average().toInt() else 0
+    val prevDefAvg = if (prevDef.isNotEmpty()) prevDef.average().toInt() else 0
+
+    val diffKcal = curKcalAvg - prevKcalAvg
+    val diffDef = curDefAvg - prevDefAvg
+
+    val tagStats = remember(allTags, allMetrics, phasePreference) {
+        val metricsMap = allMetrics.associateBy { it.date }
+        val tagMap = mutableMapOf<String, MutableList<DailyMetricEntity>>()
+
+        allTags.forEach { tagEntity ->
+            val dayTags = tagEntity.tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            val metricForDay = metricsMap[tagEntity.date]
+            if (metricForDay != null) {
+                dayTags.forEach { tag ->
+                    tagMap.getOrPut(tag) { mutableListOf() }.add(metricForDay)
+                }
+            }
+        }
+        tagMap.map { (tag, metrics) ->
+            val totalDays = metrics.size
+            val successDays = metrics.count { metric ->
+                val def = metric.deficit.toDoubleOrNull() ?: 0.0
+                if (phasePreference == "bulk") def < 0 else def > 0
+            }
+            val winRate = if (totalDays > 0) (successDays.toFloat() / totalDays * 100).toInt() else 0
+            val avgDeficit = if (totalDays > 0) metrics.mapNotNull { it.deficit.toDoubleOrNull() }.average().toInt() else 0
+            TagStat(tag, totalDays, winRate, avgDeficit)
+        }.sortedByDescending { it.totalDays }
+    }
+
+    val exportPdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        generateExecutiveSummaryPdf(
+                            outputStream = outputStream,
+                            phasePreference = phasePreference,
+                            curKcalAvg = curKcalAvg,
+                            curDefAvg = curDefAvg,
+                            tagStats = tagStats,
+                            last14Days = last14Days,
+                            allMetrics = allMetrics,
+                            allMeasurements = allMeasurements
+                        )
+                    }
+                    withContext(Dispatchers.Main) { Toast.makeText(context, "Executive Summary Saved!", Toast.LENGTH_SHORT).show() }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) { Toast.makeText(context, "Failed to generate PDF", Toast.LENGTH_SHORT).show() }
+                }
+            }
+        }
+    }
+
+    val entrance = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { entrance.animateTo(1f, animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow)) }
+
+    val animProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { animProgress.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing)) }
+
+    val displayKcal by animateIntAsState(targetValue = curKcalAvg, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "kcalTicker")
+    val displayDef by animateIntAsState(targetValue = curDefAvg, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "defTicker")
+
+    val infiniteTransition = rememberInfiniteTransition(label = "aura")
+    val auraPhase by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Reverse), label = "auraPhase")
+
+    val isSuccess = if (phasePreference == "bulk") curDefAvg <= 0 else curDefAvg >= 0
+    val baseContainer = MaterialTheme.colorScheme.surfaceVariant
+    val highlightColor = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+    val auraBrush = Brush.linearGradient(
+        colors = listOf(baseContainer, highlightColor.copy(alpha = 0.15f + (0.1f * auraPhase))),
+        start = Offset(0f, 0f),
+        end = Offset(1000f, 1000f)
+    )
+
+    val typeWeightKcal = (100 + ((displayKcal.toFloat() / (curKcalAvg.takeIf { it > 0 } ?: 1)) * 700)).toInt().coerceIn(100, 800)
+    val typeWeightDef = (100 + ((abs(displayDef).toFloat() / (abs(curDefAvg).takeIf { it > 0 } ?: 1)) * 700)).toInt().coerceIn(100, 800)
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Analytics Dashboard") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Filled.ArrowBack, "Back") }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        val filename = "Gryzor_Summary_${LocalDate.now()}.pdf"
+                        exportPdfLauncher.launch(filename)
+                    }) { Icon(Icons.Filled.Assessment, "Export PDF Report") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        }
+    ) { safeInsets ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    top = safeInsets.calculateTopPadding(),
+                    bottom = safeInsets.calculateBottomPadding()
+                ),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp)
+        ) {
+
+            fun elasticMod(index: Int) = Modifier.offset(y = (40.dp * (1f - entrance.value) * (index + 1))).alpha(entrance.value)
+
+            // --- 1. TOP METRIC CARDS ---
+            item {
+                Row(
+                    modifier = elasticMod(0).fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f).graphicsLayer { rotationX = (gyroPitch * 0.15f).coerceIn(-8f, 8f); rotationY = (gyroRoll * 0.15f).coerceIn(-8f, 8f); cameraDistance = 12f * density },
+                        shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Box(modifier = Modifier.background(auraBrush).padding(16.dp)) {
+                            Column {
+                                Text("7-Day Avg Kcal", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(text = "$displayKcal", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight(typeWeightKcal)), color = MaterialTheme.colorScheme.primary)
+                                val arrowKcal = if (diffKcal > 0) "↑" else if (diffKcal < 0) "↓" else "="
+                                val colorKcal = if (diffKcal > 0) MaterialTheme.colorScheme.error else if (diffKcal < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                Text("$arrowKcal ${abs(diffKcal)} vs last wk", style = MaterialTheme.typography.labelSmall, color = colorKcal)
+                            }
+                            Box(modifier = Modifier.matchParentSize().background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.15f), Color.Transparent), center = Offset((gyroRoll / 15f + 1f) * 300f, (gyroPitch / 15f + 1f) * 300f), radius = 500f)))
+                        }
+                    }
+                    Surface(
+                        modifier = Modifier.weight(1f).graphicsLayer { rotationX = (gyroPitch * 0.15f).coerceIn(-8f, 8f); rotationY = (gyroRoll * 0.15f).coerceIn(-8f, 8f); cameraDistance = 12f * density },
+                        shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Box(modifier = Modifier.background(auraBrush).padding(16.dp)) {
+                            Column {
+                                Text(if (phasePreference == "bulk") "7-Day Avg Surplus" else "7-Day Avg Deficit", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(text = "$displayDef", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight(typeWeightDef)), color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                                val arrowDef = if (diffDef > 0) "↑" else if (diffDef < 0) "↓" else "="
+                                val colorDef = if (phasePreference == "cut") { if (diffDef < 0) MaterialTheme.colorScheme.primary else if (diffDef > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline } else { if (diffDef > 0) MaterialTheme.colorScheme.error else if (diffDef < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline }
+                                Text("$arrowDef ${abs(diffDef)} vs last wk", style = MaterialTheme.typography.labelSmall, color = colorDef)
+                            }
+                            Box(modifier = Modifier.matchParentSize().background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.15f), Color.Transparent), center = Offset((gyroRoll / 15f + 1f) * 300f, (gyroPitch / 15f + 1f) * 300f), radius = 500f)))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // --- 2. CONSISTENCY HEATMAP ---
+            item {
+                val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+
+                Column(modifier = elasticMod(1).fillMaxWidth().padding(horizontal = 24.dp)) {
+                    Text("Consistency Heatmap", style = MaterialTheme.typography.labelLarge)
+                    Text("Last 30 days. Tap a day to view log.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(12.dp))
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            last30Days.forEach { date ->
+                                val metric = allMetrics.find { it.date == date }
+                                val defValue = metric?.deficit?.toDoubleOrNull()
+                                val isDaySuccess = if (phasePreference == "bulk") (defValue ?: 0.0) < 0 else (defValue ?: 0.0) > 0
+                                val boxColor = if (defValue == null || defValue == 0.0) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f) else if (isDaySuccess) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+
+                                Box(
+                                    modifier = Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(boxColor)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            navController.previousBackStackEntry?.savedStateHandle?.set("targetDate", date)
+                                            navController.popBackStack()
+                                        }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // --- 3. MACRO TREND GRAPH ---
+            item {
+                val primaryColor = MaterialTheme.colorScheme.primary
+                val errorColor = MaterialTheme.colorScheme.error
+                val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
+                val dateStyle = TextStyle(fontSize = 9.sp, color = MaterialTheme.colorScheme.outline)
+                val tooltipStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                var tappedMacro by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
+
+                Column(modifier = elasticMod(2).fillMaxWidth().padding(horizontal = 24.dp)) {
+                    Text("14-Day Macro Trend", style = MaterialTheme.typography.labelLarge)
+                    Text("Shaded = 'Grind'. Primary = Kcal, Red = Deficit.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(12.dp))
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(190.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                            Canvas(modifier = Modifier.fillMaxSize()
+                                .pointerInput(allMetrics) {
+                                    detectTapGestures { tapOffset ->
+                                        val stepX = size.width / 13f; val paddingBottom = 40f; val graphHeight = size.height - paddingBottom
+                                        val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
+                                        val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
+                                        val totalRange = maxKcal - minDeficit
+                                        val points = mutableListOf<Triple<Offset, String, Color>>()
+                                        last14Days.forEachIndexed { index, date ->
+                                            val metric = allMetrics.find { it.date == date }; val x = index * stepX
+                                            val kcal = metric?.totalKcal?.toFloatOrNull()
+                                            if (kcal != null) points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} Kcal", primaryColor))
+                                            val deficit = metric?.deficit?.toFloatOrNull()
+                                            if (deficit != null) points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
+                                        }
+                                        val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
+                                        if (closest != null && (closest.first - tapOffset).getDistance() < 60f) { tappedMacro = closest; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) } else { tappedMacro = null }
+                                    }
+                                }
+                                .pointerInput(allMetrics) {
+                                    detectDragGestures(onDragEnd = { tappedMacro = null }, onDragCancel = { tappedMacro = null }) { change, _ ->
+                                        val offset = change.position
+                                        val stepX = size.width / 13f; val paddingBottom = 40f; val graphHeight = size.height - paddingBottom
+                                        val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
+                                        val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
+                                        val totalRange = maxKcal - minDeficit
+                                        val points = mutableListOf<Triple<Offset, String, Color>>()
+                                        last14Days.forEachIndexed { index, date ->
+                                            val metric = allMetrics.find { it.date == date }; val x = index * stepX
+                                            val kcal = metric?.totalKcal?.toFloatOrNull()
+                                            if (kcal != null) points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} Kcal", primaryColor))
+                                            val deficit = metric?.deficit?.toFloatOrNull()
+                                            if (deficit != null) points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
+                                        }
+                                        val closest = points.minByOrNull { (it.first - offset).getDistance() }
+                                        if (closest != null && (closest.first - offset).getDistance() < 80f) {
+                                            if (tappedMacro?.first != closest.first) { tappedMacro = closest; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        }
+                                    }
+                                }
+                            ) {
+                                val stepX = size.width / 13f; val paddingBottom = 40f; val graphHeight = size.height - paddingBottom
+                                val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
+                                val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
+                                val totalRange = maxKcal - minDeficit
+
+                                last14Days.forEachIndexed { index, date ->
+                                    val tagsForDate = allTags.find { it.date == date }?.tags ?: ""
+                                    if (tagsForDate.contains("Grind", ignoreCase = true)) { drawRoundRect(color = surfaceColor.copy(alpha = animProgress.value), topLeft = Offset(index * stepX - (stepX / 2f), 0f), size = Size(stepX, graphHeight), cornerRadius = CornerRadius(8f, 8f)) }
+                                    val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
+                                    drawText(layoutResult, topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f))
+                                }
+
+                                val zeroY = graphHeight - ((0 - minDeficit) / totalRange) * graphHeight
+                                drawLine(color = Color.Gray.copy(alpha = 0.3f), start = Offset(0f, zeroY), end = Offset(size.width, zeroY), strokeWidth = 2f)
+
+                                val kcalPath = Path(); val deficitPath = Path(); val kcalAreaPath = Path(); val deficitAreaPath = Path()
+                                var firstKcal = true; var firstDeficit = true; var lastKcalX = 0f; var lastDefX = 0f
+
+                                last14Days.forEachIndexed { index, date ->
+                                    val metric = allMetrics.find { it.date == date }; val x = index * stepX
+                                    val kcal = metric?.totalKcal?.toFloatOrNull()
+                                    if (kcal != null) {
+                                        val y = zeroY + ((graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
+                                        lastKcalX = x
+                                        if (firstKcal) { kcalPath.moveTo(x, y); kcalAreaPath.moveTo(x, graphHeight); kcalAreaPath.lineTo(x, y); firstKcal = false } else { kcalPath.lineTo(x, y); kcalAreaPath.lineTo(x, y) }
+                                        drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
+                                    }
+                                    val deficit = metric?.deficit?.toFloatOrNull()
+                                    if (deficit != null) {
+                                        val y = zeroY + ((graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
+                                        lastDefX = x
+                                        if (firstDeficit) { deficitPath.moveTo(x, y); deficitAreaPath.moveTo(x, zeroY); deficitAreaPath.lineTo(x, y); firstDeficit = false } else { deficitPath.lineTo(x, y); deficitAreaPath.lineTo(x, y) }
+                                        drawCircle(color = errorColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
+                                    }
+                                }
+
+                                if (!firstKcal) { kcalAreaPath.lineTo(lastKcalX, graphHeight); kcalAreaPath.close(); drawPath(path = kcalAreaPath, brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)) }
+                                if (!firstDeficit) { deficitAreaPath.lineTo(lastDefX, zeroY); deficitAreaPath.close(); drawPath(path = deficitAreaPath, brush = Brush.verticalGradient(colors = listOf(errorColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)) }
+                                drawPath(path = kcalPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
+                                drawPath(path = deficitPath, color = errorColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
+
+                                tappedMacro?.let { (offset, text, color) ->
+                                    val textLayout = textMeasurer.measure(text, tooltipStyle)
+                                    val tWidth = textLayout.size.width + 24f; val tHeight = textLayout.size.height + 16f
+                                    var tX = offset.x - tWidth / 2; if (tX < 0f) tX = 0f; if (tX + tWidth > size.width) tX = size.width - tWidth
+                                    var tY = offset.y - tHeight - 16f; if (tY < 0f) tY = offset.y + 16f
+                                    drawRoundRect(color = color, topLeft = Offset(tX, tY), size = Size(tWidth, tHeight), cornerRadius = CornerRadius(12f, 12f))
+                                    drawText(textLayoutResult = textLayout, topLeft = Offset(tX + 12f, tY + 8f))
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // --- 4. BODY COMP TREND GRAPH ---
+            item {
+                val primaryColor = MaterialTheme.colorScheme.primary
+                val secColor = MaterialTheme.colorScheme.secondary
+                val dateStyle = TextStyle(fontSize = 9.sp, color = MaterialTheme.colorScheme.outline)
+                val tooltipStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
+
+                Column(modifier = elasticMod(3).fillMaxWidth().padding(horizontal = 24.dp)) {
+                    Text("Body Composition Trend", style = MaterialTheme.typography.labelLarge)
+                    Text("Primary = Weight (66-85kg), Secondary = Fat (10-25%).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(12.dp))
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(190.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                            Canvas(modifier = Modifier.fillMaxSize()
+                                .pointerInput(allMeasurements) {
+                                    detectTapGestures { tapOffset ->
+                                        val stepX = size.width / 13f; val paddingBottom = 40f; val graphHeight = size.height - paddingBottom
+                                        val maxWeight = 85f; val minWeight = 66f; val rangeW = maxWeight - minWeight
+                                        val maxFat = 25f; val minFat = 10f; val rangeF = maxFat - minFat
+                                        val points = mutableListOf<Triple<Offset, String, Color>>()
+                                        last14Days.forEachIndexed { index, date ->
+                                            val measure = allMeasurements.find { it.date == date }; val x = index * stepX
+                                            val w = measure?.weight?.toFloatOrNull()
+                                            if (w != null) points.add(Triple(Offset(x, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg", primaryColor))
+                                            val f = measure?.bodyFat?.toFloatOrNull()
+                                            if (f != null) points.add(Triple(Offset(x, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%", secColor))
+                                        }
+                                        val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
+                                        if (closest != null && (closest.first - tapOffset).getDistance() < 60f) { tappedComp = closest; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) } else { tappedComp = null }
+                                    }
+                                }
+                                .pointerInput(allMeasurements) {
+                                    detectDragGestures(onDragEnd = { tappedComp = null }, onDragCancel = { tappedComp = null }) { change, _ ->
+                                        val offset = change.position
+                                        val stepX = size.width / 13f; val paddingBottom = 40f; val graphHeight = size.height - paddingBottom
+                                        val maxWeight = 85f; val minWeight = 66f; val rangeW = maxWeight - minWeight
+                                        val maxFat = 25f; val minFat = 10f; val rangeF = maxFat - minFat
+                                        val points = mutableListOf<Triple<Offset, String, Color>>()
+                                        last14Days.forEachIndexed { index, date ->
+                                            val measure = allMeasurements.find { it.date == date }; val x = index * stepX
+                                            val w = measure?.weight?.toFloatOrNull()
+                                            if (w != null) points.add(Triple(Offset(x, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg", primaryColor))
+                                            val f = measure?.bodyFat?.toFloatOrNull()
+                                            if (f != null) points.add(Triple(Offset(x, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%", secColor))
+                                        }
+                                        val closest = points.minByOrNull { (it.first - offset).getDistance() }
+                                        if (closest != null && (closest.first - offset).getDistance() < 80f) {
+                                            if (tappedComp?.first != closest.first) { tappedComp = closest; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        }
+                                    }
+                                }
+                            ) {
+                                val stepX = size.width / 13f; val paddingBottom = 40f; val graphHeight = size.height - paddingBottom; val startY = graphHeight
+                                val maxWeight = 85f; val minWeight = 66f; val rangeW = maxWeight - minWeight
+                                val maxFat = 25f; val minFat = 10f; val rangeF = maxFat - minFat
+
+                                val wPath = Path(); val fPath = Path(); val wAreaPath = Path(); val fAreaPath = Path()
+                                var firstW = true; var firstF = true; var lastWX = 0f; var lastFX = 0f
+
+                                last14Days.forEachIndexed { index, date ->
+                                    val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
+                                    drawText(layoutResult, topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f))
+                                    val measure = allMeasurements.find { it.date == date }; val x = index * stepX
+                                    val w = measure?.weight?.toFloatOrNull()
+                                    if (w != null) {
+                                        val y = startY + ((graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight) - startY) * animProgress.value
+                                        lastWX = x
+                                        if (firstW) { wPath.moveTo(x, y); wAreaPath.moveTo(x, graphHeight); wAreaPath.lineTo(x, y); firstW = false } else { wPath.lineTo(x, y); wAreaPath.lineTo(x, y) }
+                                        drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
+                                    }
+                                    val f = measure?.bodyFat?.toFloatOrNull()
+                                    if (f != null) {
+                                        val y = startY + ((graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight) - startY) * animProgress.value
+                                        lastFX = x
+                                        if (firstF) { fPath.moveTo(x, y); fAreaPath.moveTo(x, graphHeight); fAreaPath.lineTo(x, y); firstF = false } else { fPath.lineTo(x, y); fAreaPath.lineTo(x, y) }
+                                        drawCircle(color = secColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
+                                    }
+                                }
+
+                                if (!firstW) { wAreaPath.lineTo(lastWX, graphHeight); wAreaPath.close(); drawPath(path = wAreaPath, brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)) }
+                                if (!firstF) { fAreaPath.lineTo(lastFX, graphHeight); fAreaPath.close(); drawPath(path = fAreaPath, brush = Brush.verticalGradient(colors = listOf(secColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)) }
+                                drawPath(path = wPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
+                                drawPath(path = fPath, color = secColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
+
+                                tappedComp?.let { (offset, text, color) ->
+                                    val textLayout = textMeasurer.measure(text, tooltipStyle)
+                                    val tWidth = textLayout.size.width + 24f; val tHeight = textLayout.size.height + 16f
+                                    var tX = offset.x - tWidth / 2; if (tX < 0f) tX = 0f; if (tX + tWidth > size.width) tX = size.width - tWidth
+                                    var tY = offset.y - tHeight - 16f; if (tY < 0f) tY = offset.y + 16f
+                                    drawRoundRect(color = color, topLeft = Offset(tX, tY), size = Size(tWidth, tHeight), cornerRadius = CornerRadius(12f, 12f))
+                                    drawText(textLayoutResult = textLayout, topLeft = Offset(tX + 12f, tY + 8f))
+                                }
+                            }
+                        }
+                    }
+
+                    // --- V3.8 PHASE-AWARE TRAJECTORY ENGINE ---
+                    if (phasePreference == "cut") {
+                        if (curDefAvg > 0) {
+                            val weeklyLoss = (curDefAvg * 7) / 7700.0
+                            Surface(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text("Trajectory Engine (Cut)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                                        Text("Based on your 7-day average deficit of ${curDefAvg} kcal, you are on pace to lose ${String.format("%.2f", weeklyLoss)} kg of fat this week.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        } else if (curDefAvg < 0) {
+                            val weeklyGain = (abs(curDefAvg) * 7) / 7700.0
+                            Surface(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text("Trajectory Engine Alert", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                                        Text("Based on your 7-day average surplus of ${abs(curDefAvg)} kcal, you are on pace to gain ${String.format("%.2f", weeklyGain)} kg this week. Reduce calories to resume cut.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if (curDefAvg < 0) {
+                            val weeklyGain = (abs(curDefAvg) * 7) / 7700.0
+                            Surface(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text("Trajectory Engine (Bulk)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                        Text("Based on your 7-day average surplus of ${abs(curDefAvg)} kcal, you are on pace to build ${String.format("%.2f", weeklyGain)} kg of mass this week.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        } else if (curDefAvg > 0) {
+                            val weeklyLoss = (curDefAvg * 7) / 7700.0
+                            Surface(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.TrendingDown, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text("Trajectory Engine Alert", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                                        Text("Based on your 7-day average deficit of ${curDefAvg} kcal, you are losing ${String.format("%.2f", weeklyLoss)} kg this week. Increase calories to maintain bulk.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // --- 5. BEHAVIORAL COMPLIANCE MATRIX ---
+            item {
+                var showTooltip by remember { mutableStateOf(false) }
+                if (tagStats.isNotEmpty()) {
+                    Column(modifier = elasticMod(4).fillMaxWidth().padding(horizontal = 24.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Behavioral Compliance Matrix", style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(20.dp).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showTooltip = !showTooltip }
+                            ) { Icon(imageVector = Icons.Filled.QuestionMark, contentDescription = "How is this calculated?", modifier = Modifier.padding(3.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                        AnimatedVisibility(visible = showTooltip) {
+                            Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                val successText = if (phasePreference == "bulk") "Surplus (< 0)" else "Deficit (> 0)"
+                                Text(text = "Success Rate = The percentage of days with this tag where you successfully logged a Caloric $successText.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(12.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                tagStats.forEachIndexed { index, stat ->
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Column(modifier = Modifier.weight(1f)) { Text(stat.tag, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary); Text("${stat.totalDays} days logged", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            val rateColor = if (stat.winRate >= 70) MaterialTheme.colorScheme.primary else if (stat.winRate >= 40) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                                            Text("${stat.winRate}% Success", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = rateColor); Text("Avg Def: ${stat.avgDeficit}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                        }
+                                    }
+                                    if (index < tagStats.size - 1) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
