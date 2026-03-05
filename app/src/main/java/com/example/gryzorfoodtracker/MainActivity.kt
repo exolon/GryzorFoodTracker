@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.map
 val Context.dataStore by preferencesDataStore(name = "settings")
 val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
 val CUSTOM_TAGS_KEY = stringSetPreferencesKey("custom_tags")
-val PHASE_MODE_KEY = stringPreferencesKey("phase_mode") // This fixes the ghost errors
+val PHASE_MODE_KEY = stringPreferencesKey("phase_mode")
 val DEFAULT_TAGS = setOf("Grind", "Fasting", "High Protein", "Upper Body Bias")
 
 class MainActivity : ComponentActivity() {
@@ -118,10 +118,22 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("analytics") {
-                            AnalyticsScreen(navController = navController, db = db)
+                            AnalyticsScreen(
+                                navController = navController,
+                                db = db
+                            )
+                        }
+                        composable("behavior") {
+                            BehaviorScreen(
+                                navController = navController,
+                                db = db
+                            )
                         }
                         composable("settings") {
-                            SettingsScreen(navController = navController, db = db)
+                            SettingsScreen(
+                                navController = navController,
+                                db = db
+                            )
                         }
                     }
                 }

@@ -113,6 +113,7 @@ fun LargeDayHeader(
     dailyWeight: String?,
     dailyFat: String?,
     scrollBehavior: TopAppBarScrollBehavior,
+    onBehaviorClick: () -> Unit, // <-- FIXED: Added missing parameter
     onAnalyticsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onPrev: () -> Unit,
@@ -145,7 +146,6 @@ fun LargeDayHeader(
                             .mapNotNull { it }
                             .joinToString(" | ")
 
-                        // FIXED: Smooth horizontal scroll (Marquee) instead of vertical wrap/crop
                         Text(
                             text = listOf(macros, comp).filter { it.isNotEmpty() }.joinToString(" • "),
                             style = MaterialTheme.typography.labelMedium,
@@ -167,8 +167,12 @@ fun LargeDayHeader(
             IconButton(onClick = onNext) {
                 Icon(Icons.Filled.ChevronRight, "Next", modifier = Modifier.size(32.dp))
             }
+            // <-- FIXED: Added Behavior Route Button -->
+            IconButton(onClick = onBehaviorClick) {
+                Icon(Icons.Filled.Insights, "Behavioral Engine")
+            }
             IconButton(onClick = onAnalyticsClick) {
-                Icon(Icons.Filled.Insights, "Analytics")
+                Icon(Icons.Filled.Assessment, "Analytics")
             }
             IconButton(onClick = onCopy) {
                 Icon(Icons.Filled.Share, "Share Markdown")

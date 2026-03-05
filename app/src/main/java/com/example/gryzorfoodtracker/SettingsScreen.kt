@@ -46,8 +46,6 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     val coroutineScope = rememberCoroutineScope()
     val dao = db.mealDao()
 
-    val today = LocalDate.now()
-
     val themePreference by context.dataStore.data
         .map { it[THEME_MODE_KEY] ?: "system" }
         .collectAsState("system")
@@ -157,6 +155,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         Spacer(Modifier.height(12.dp))
                         Text("Analytics Dashboard", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Text("• Features: View your 14-day Macro Trend, Body Comp Trend, Trajectory Engine, and Behavioral Compliance Matrix.", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Behavioral Engine (v4.0)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },
@@ -171,6 +172,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), and Marginal Fuel ROI.",
                         "v3.9" to "The Reporting Pass: Enhanced native PDF export with scaled vector line-graphs for Macros and Body Composition. Fully mapped Historical Version Log.",
                         "v3.8" to "The Executive Pass: Added Dietary Phase toggling (Cut vs Bulk), Heatmap navigation, Haptic Chart Scrubbing, and single-page PDF generation.",
                         "v3.7" to "The Polish Pass: Restored core UI stability, fixed content clipping under App Bars, bound Heatmap to 30-day wrap logic.",
@@ -258,10 +260,13 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                 }
             }
 
-            // --- V3.9 PHASE TOGGLE SECTION ---
+            // --- PHASE TOGGLE SECTION ---
             item {
                 Column(modifier = elasticMod(1)) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                     Row(
                         modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -313,7 +318,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             // --- CONTEXT TAGS SECTION ---
             item {
                 Column(modifier = elasticMod(2)) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                     Row(
                         modifier = Modifier.padding(start = 24.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -388,7 +396,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             // --- DATA MANAGEMENT SECTION ---
             item {
                 Column(modifier = elasticMod(3)) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                     Row(
                         modifier = Modifier.padding(start = 24.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -475,7 +486,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             // --- ABOUT SECTION ---
             item {
                 Column(modifier = elasticMod(4)) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { showManual = true }.padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -498,7 +512,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             // --- APP VERSION FOOTER ---
             item {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 40.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 0.dp, top = 24.dp, end = 0.dp, bottom = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -507,7 +521,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        "v3.9",
+                        "v4.0",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

@@ -256,6 +256,9 @@ fun FoodTrackerScreen(
                     dailyWeight = currentDayMeasurement?.weight,
                     dailyFat = currentDayMeasurement?.bodyFat,
                     scrollBehavior = scrollBehavior,
+                    // --- V4.0 NEW BEHAVIORAL ROUTE HOOKED IN HERE ---
+                    onBehaviorClick = { navController.navigate("behavior") },
+                    // ------------------------------------------------
                     onAnalyticsClick = { navController.navigate("analytics") },
                     onSettingsClick = { navController.navigate("settings") },
                     onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
