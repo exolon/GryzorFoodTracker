@@ -71,7 +71,6 @@ fun getMealIcon(type: String): ImageVector {
     }
 }
 
-// Hardware Gyroscope Engine (Outputs Degrees)
 @Composable
 fun rememberGyroscopeTilt(): Pair<Float, Float> {
     val context = LocalContext.current
@@ -112,8 +111,10 @@ fun LargeDayHeader(
     dailyDeficit: String?,
     dailyWeight: String?,
     dailyFat: String?,
+    frictionScore: Int,
+    onFrictionChange: (Int) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
-    onBehaviorClick: () -> Unit, // <-- FIXED: Added missing parameter
+    onBehaviorClick: () -> Unit,
     onAnalyticsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onPrev: () -> Unit,
@@ -123,11 +124,72 @@ fun LargeDayHeader(
     LargeTopAppBar(
         title = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = date.format(DateTimeFormatter.ofPattern("EEEE")),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(end = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = date.format(DateTimeFormatter.ofPattern("EEEE")),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+
+                    var expanded by remember { mutableStateOf(false) }
+                    Box(modifier = Modifier.padding(end = 16.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (frictionScore >= 4) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { expanded = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Psychology,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (frictionScore >= 4) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = if (frictionScore > 0) "Load: $frictionScore/5" else "Set Load",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (frictionScore >= 4) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            (1..5).forEach { level ->
+                                DropdownMenuItem(
+                                    text = { Text("Level $level Friction") },
+                                    onClick = {
+                                        onFrictionChange(level)
+                                        expanded = false
+                                    }
+                                )
+                            }
+                            if (frictionScore > 0) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Clear", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        onFrictionChange(0)
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(end = 16.dp)
+                ) {
                     Text(
                         text = date.format(DateTimeFormatter.ofPattern("MMMM dd, yyyy")),
                         style = MaterialTheme.typography.labelLarge,
@@ -135,16 +197,22 @@ fun LargeDayHeader(
                     )
                     if (!dailyKcal.isNullOrBlank() || !dailyDeficit.isNullOrBlank() || !dailyWeight.isNullOrBlank() || !dailyFat.isNullOrBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "•", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        val macros = listOf(dailyKcal?.let { "$it Kcal" }, dailyDeficit?.let { "Def: $it" })
-                            .mapNotNull { it }
-                            .joinToString(" | ")
+                        val macros = listOf(
+                            dailyKcal?.let { "$it Kcal" },
+                            dailyDeficit?.let { "Def: $it" }
+                        ).mapNotNull { it }.joinToString(" | ")
 
-                        val comp = listOf(dailyWeight?.let { "${it}kg" }, dailyFat?.let { "${it}%" })
-                            .mapNotNull { it }
-                            .joinToString(" | ")
+                        val comp = listOf(
+                            dailyWeight?.let { "${it}kg" },
+                            dailyFat?.let { "${it}%" }
+                        ).mapNotNull { it }.joinToString(" | ")
 
                         Text(
                             text = listOf(macros, comp).filter { it.isNotEmpty() }.joinToString(" • "),
@@ -167,7 +235,6 @@ fun LargeDayHeader(
             IconButton(onClick = onNext) {
                 Icon(Icons.Filled.ChevronRight, "Next", modifier = Modifier.size(32.dp))
             }
-            // <-- FIXED: Added Behavior Route Button -->
             IconButton(onClick = onBehaviorClick) {
                 Icon(Icons.Filled.Insights, "Behavioral Engine")
             }
@@ -275,16 +342,26 @@ fun MealCard(
             border = BorderStroke(1.dp, borderColor)
         ) {
             Row(
-                modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                        .background(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            RoundedCornerShape(16.dp)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(getMealIcon(entry.type), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    Icon(
+                        imageVector = getMealIcon(entry.type),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -343,7 +420,9 @@ fun AddMealDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -394,7 +473,9 @@ fun AddMealDialog(
 
                 if (filteredSuggestions.isNotEmpty()) {
                     LazyRow(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredSuggestions) { suggestion ->
@@ -408,7 +489,10 @@ fun AddMealDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
@@ -432,7 +516,10 @@ fun AddMealDialog(
                 }) { Text("OK") }
             }
         ) {
-            TimePicker(state = timePickerState, modifier = Modifier.padding(24.dp))
+            TimePicker(
+                state = timePickerState,
+                modifier = Modifier.padding(24.dp)
+            )
         }
     }
 }

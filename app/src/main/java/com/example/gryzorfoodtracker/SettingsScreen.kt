@@ -148,7 +148,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         Text("• Voice Input: Hold the Mic button, say 'Snack, an apple at 4 pm', and let the AI parse the rest.\n• Gestures: Swipe a meal left to delete. Swipe right to instantly duplicate it.", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Text("The Context Layer", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).", style = MaterialTheme.typography.bodyMedium)
+                        Text("• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         Text("The AI Loop", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Text("• Weekly Strategic Review: Export your trailing 7 days (including your weight/fat inputs) to your AI for high-level pattern recognition.", style = MaterialTheme.typography.bodyMedium)
@@ -156,8 +156,8 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         Text("Analytics Dashboard", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Text("• Features: View your 14-day Macro Trend, Body Comp Trend, Trajectory Engine, and Behavioral Compliance Matrix.", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
-                        Text("Behavioral Engine (v4.0)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.", style = MaterialTheme.typography.bodyMedium)
+                        Text("Behavioral Engine", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },
@@ -172,7 +172,8 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), and Marginal Fuel ROI.",
+                        "v4.1" to "The UX Polish Pass: Added explicit Help Tooltips to all charts and behavioral metrics. Isolated 'Cognitive Load' into a dedicated Dropdown Header Picker, decoupling it from the Tag UI without touching the DB schema.",
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
                         "v3.9" to "The Reporting Pass: Enhanced native PDF export with scaled vector line-graphs for Macros and Body Composition. Fully mapped Historical Version Log.",
                         "v3.8" to "The Executive Pass: Added Dietary Phase toggling (Cut vs Bulk), Heatmap navigation, Haptic Chart Scrubbing, and single-page PDF generation.",
                         "v3.7" to "The Polish Pass: Restored core UI stability, fixed content clipping under App Bars, bound Heatmap to 30-day wrap logic.",
@@ -203,7 +204,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             TopAppBar(
                 title = { Text("Options") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, "Back")
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -216,7 +219,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding
         ) {
-            fun elasticMod(index: Int) = Modifier.offset(y = (40.dp * (1f - entrance.value) * (index + 1))).alpha(entrance.value)
+            fun elasticMod(index: Int) = Modifier
+                .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
+                .alpha(entrance.value)
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
@@ -224,10 +229,15 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             item {
                 Column(modifier = elasticMod(0)) {
                     Row(
-                        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 0.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(Modifier.width(12.dp))
                         Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     }
@@ -268,10 +278,15 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     Row(
-                        modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 0.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.SwapVert, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(
+                            imageVector = Icons.Filled.SwapVert,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(Modifier.width(12.dp))
                         Text("Dietary Phase", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     }
@@ -280,7 +295,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         text = "Defines how the Analytics Engine interprets your success metrics.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 8.dp)
                     )
 
                     Row(
@@ -323,10 +338,15 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     Row(
-                        modifier = Modifier.padding(start = 24.dp, bottom = 16.dp),
+                        modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 0.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Label, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Label,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(Modifier.width(12.dp))
                         Text("Context Tags", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     }
@@ -401,10 +421,15 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     Row(
-                        modifier = Modifier.padding(start = 24.dp, bottom = 16.dp),
+                        modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 0.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Storage,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(Modifier.width(12.dp))
                         Text("Data Management", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     }
@@ -521,7 +546,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        "v4.0",
+                        "v4.1",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

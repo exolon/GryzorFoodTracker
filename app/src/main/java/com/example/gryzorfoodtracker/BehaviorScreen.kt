@@ -11,10 +11,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.PriceCheck
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.SsidChart
+import androidx.compose.material.icons.filled.TrendingFlat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -49,8 +55,8 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
 
     val last14Days = remember(today) { (13 downTo 0).map { today.minusDays(it.toLong()).toString() } }
+    val daysReversed = remember(last14Days) { last14Days.reversed() }
 
-    // --- 1. THE CALORIC VIX ---
     val vixScore = remember(last14Days, allMetrics) {
         val kcals = allMetrics.filter { last14Days.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
         if (kcals.size < 2) 0 else {
@@ -60,7 +66,6 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
         }
     }
 
-    // --- 2. MARGINAL FUEL ROI ---
     val fuelEfficiency = remember(last14Days, allMetrics, allTags) {
         var totalSurplusDays = 0
         var strategicSurplusDays = 0
@@ -78,13 +83,11 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
         if (totalSurplusDays == 0) 100 else ((strategicSurplusDays.toFloat() / totalSurplusDays) * 100).toInt()
     }
 
-    // --- 3. PREDICTIVE DEGRADATION (BURNOUT METER) ---
-    val burnoutRisk = remember(last14Days, allMetrics, vixScore, phasePreference) {
+    val burnoutRisk = remember(daysReversed, allMetrics, vixScore, phasePreference) {
         if (phasePreference == "bulk") 0
         else {
             var streak = 0
             var recentDeficitSum = 0.0
-            val daysReversed = last14Days.reversed()
             for (date in daysReversed) {
                 val metric = allMetrics.find { it.date == date }
                 val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
@@ -103,19 +106,73 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
         }
     }
 
-    val entrance = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { entrance.animateTo(1f, animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow)) }
+    val momentumData = remember(daysReversed, allMetrics) {
+        val recent3 = daysReversed.take(3).mapNotNull { date -> allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() }
+        val avg3 = if (recent3.isNotEmpty()) recent3.average() else 0.0
+        val all14 = daysReversed.mapNotNull { date -> allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() }
+        val avg14 = if (all14.isNotEmpty()) all14.average() else 0.0
+        Pair(avg3.toInt(), avg14.toInt())
+    }
 
-    // Tooltip States
+    val paretoLeakage = remember(last14Days, allMetrics, allTags) {
+        val surplusDays = last14Days.filter { date ->
+            val def = allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
+            def < 0
+        }
+        if (surplusDays.isEmpty()) Pair("None", 0) else {
+            val tagCounts = mutableMapOf<String, Int>()
+            surplusDays.forEach { date ->
+                val tags = allTags.find { it.date == date }?.tags?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                if (tags.isEmpty()) {
+                    tagCounts["Untagged"] = tagCounts.getOrDefault("Untagged", 0) + 1
+                } else {
+                    tags.forEach { tag -> tagCounts[tag] = tagCounts.getOrDefault(tag, 0) + 1 }
+                }
+            }
+            val worstTag = tagCounts.maxByOrNull { it.value }
+            if (worstTag != null) Pair(worstTag.key, ((worstTag.value.toFloat() / surplusDays.size) * 100).toInt()) else Pair("None", 0)
+        }
+    }
+
+    val frictionData = remember(last14Days, allMetrics, allTags, phasePreference) {
+        var highFrictionDays = 0
+        var highFrictionWins = 0
+        last14Days.forEach { date ->
+            val tags = allTags.find { it.date == date }?.tags ?: ""
+            if (tags.contains("Friction:", ignoreCase = true)) {
+                val level = tags.split(",").find { it.trim().startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                if (level >= 4) {
+                    highFrictionDays++
+                    val def = allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
+                    val isWin = if (phasePreference == "bulk") def < 0 else def > 0
+                    if (isWin) highFrictionWins++
+                }
+            }
+        }
+        if (highFrictionDays == 0) -1 else ((highFrictionWins.toFloat() / highFrictionDays) * 100).toInt()
+    }
+
+    val entrance = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        entrance.animateTo(1f, animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow))
+    }
+
     var showBurnoutTooltip by remember { mutableStateOf(false) }
     var showVixTooltip by remember { mutableStateOf(false) }
     var showRoiTooltip by remember { mutableStateOf(false) }
+    var showMomentumTooltip by remember { mutableStateOf(false) }
+    var showParetoTooltip by remember { mutableStateOf(false) }
+    var showEgoTooltip by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Behavioral Engine") },
-                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Filled.ArrowBack, "Back") } },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, "Back")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background
@@ -127,25 +184,62 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding
         ) {
-            fun elasticMod(index: Int) = Modifier.offset(y = (40.dp * (1f - entrance.value) * (index + 1))).alpha(entrance.value)
+            fun elasticMod(index: Int) = Modifier
+                .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
+                .alpha(entrance.value)
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            // --- BURNOUT METER ---
+            // --- SECTION 1: BURNOUT METER ---
             item {
-                Column(modifier = elasticMod(0).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)) {
+                Column(
+                    modifier = elasticMod(0)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Predictive Degradation", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Predictive Degradation",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(Modifier.width(8.dp))
                         Surface(
-                            shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(20.dp).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showBurnoutTooltip = !showBurnoutTooltip }
-                        ) { Icon(imageVector = Icons.Filled.QuestionMark, contentDescription = "Info", modifier = Modifier.padding(3.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showBurnoutTooltip = !showBurnoutTooltip
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.QuestionMark,
+                                contentDescription = "Info",
+                                modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    Text("Real-time psychological bandwidth & failure risk.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        text = "Real-time psychological bandwidth & failure risk.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
 
                     AnimatedVisibility(visible = showBurnoutTooltip) {
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)) {
-                            Text("Combines consecutive deficit days, deficit severity, and Caloric VIX to calculate the statistical probability of a diet failure. Reach 80% and a Maintenance break is highly recommended.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(12.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                        ) {
+                            Text(
+                                text = "Calculation: [Streak Days x 10] + [Deficit Intensity Penalty] + [Metabolic Volatility Penalty]. It predicts when the 'rubber-band effect' will trigger a binge based on cumulative biological stress.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                            )
                         }
                     }
 
@@ -157,31 +251,58 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ) {
-                        Column(modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)) {
+                        Column(
+                            modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
+                        ) {
                             if (phasePreference == "bulk") {
-                                Text("Burnout tracking is currently disabled while in Bulk phase.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                                Text(
+                                    text = "Burnout tracking is currently disabled while in Bulk phase.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
                             } else {
                                 val meterColor = if (burnoutRisk >= 80) MaterialTheme.colorScheme.error else if (burnoutRisk >= 50) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
-
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.BatteryAlert, contentDescription = null, tint = meterColor, modifier = Modifier.size(24.dp))
+                                    Icon(
+                                        imageVector = Icons.Filled.BatteryAlert,
+                                        contentDescription = null,
+                                        tint = meterColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                     Spacer(Modifier.width(12.dp))
-                                    Text("$burnoutRisk% Burnout Risk", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = meterColor)
+                                    Text(
+                                        text = "$burnoutRisk% Burnout Risk",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = meterColor
+                                    )
                                 }
+
                                 Spacer(Modifier.height(16.dp))
 
                                 LinearProgressIndicator(
                                     progress = { burnoutRisk / 100f },
-                                    modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(12.dp)
+                                        .clip(RoundedCornerShape(6.dp)),
                                     color = meterColor,
                                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
+
                                 Spacer(Modifier.height(16.dp))
 
-                                val riskText = if (burnoutRisk >= 80) "Critical Fatigue. Willpower reserves depleted. A tactical Maintenance day is mathematically required to prevent rubber-band bingeing." else if (burnoutRisk >= 50) "Moderate Fatigue. Deficit streak is taxing the system. Keep an eye on daily VIX volatility." else "System Stable. High cognitive bandwidth available. Clear to continue Grind protocols."
-
-                                Surface(color = meterColor.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
-                                    Text(riskText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp), color = MaterialTheme.colorScheme.onSurface)
+                                val riskText = if (burnoutRisk >= 80) "Critical Fatigue. Willpower reserves depleted. A tactical Maintenance day is mathematically required." else if (burnoutRisk >= 50) "Moderate Fatigue. Deficit streak is taxing the system." else "System Stable. High cognitive bandwidth available."
+                                Surface(
+                                    color = meterColor.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = riskText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
                                 }
                             }
                         }
@@ -189,54 +310,433 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 }
             }
 
-            // --- VIX & ROI SECTION ---
+            // --- SECTION 2: SYSTEM ECONOMICS ---
             item {
-                Column(modifier = elasticMod(1).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 40.dp)) {
-                    Text("System Economics", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Column(
+                    modifier = elasticMod(1)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "System Economics",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(Modifier.height(12.dp))
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         // VIX Card
-                        Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
                             Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     val vixColor = if (vixScore > 300) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                    Icon(Icons.Filled.SsidChart, contentDescription = null, tint = vixColor, modifier = Modifier.size(24.dp))
-                                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(20.dp).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showVixTooltip = !showVixTooltip }) { Icon(imageVector = Icons.Filled.QuestionMark, contentDescription = "Info", modifier = Modifier.padding(3.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    Icon(
+                                        imageVector = Icons.Filled.SsidChart,
+                                        contentDescription = null,
+                                        tint = vixColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                showVixTooltip = !showVixTooltip
+                                            }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.QuestionMark,
+                                            contentDescription = "Info",
+                                            modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
 
                                 AnimatedVisibility(visible = showVixTooltip) {
-                                    Text("Measures the standard deviation of your daily caloric intake. High volatility (>300) is often a leading indicator of erratic habits.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp))
+                                    Text(
+                                        text = "Calculation: Standard Deviation (σ) of daily calories over 14 days.\n1. Mean (μ) = Avg daily calories.\n2. Variance = Avg of squared differences from the Mean.\n3. VIX = Square root of Variance.\nHigh volatility (>300) indicates erratic eating patterns.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                                    )
                                 }
 
                                 Spacer(Modifier.height(12.dp))
+
                                 val vixColor = if (vixScore > 300) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                Text("Caloric VIX", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
-                                Text("$vixScore SD", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = vixColor)
+                                Text(
+                                    text = "Caloric VIX",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "$vixScore SD",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = vixColor
+                                )
                                 Spacer(Modifier.height(4.dp))
-                                Text(if (vixScore > 300) "High Volatility" else "Stable Variance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text(
+                                    text = if (vixScore > 300) "High Volatility" else "Stable Variance",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
                             }
                         }
 
                         // ROI Card
-                        Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
                             Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     val roiColor = if (fuelEfficiency >= 80) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                    Icon(Icons.Filled.PriceCheck, contentDescription = null, tint = roiColor, modifier = Modifier.size(24.dp))
-                                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(20.dp).clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showRoiTooltip = !showRoiTooltip }) { Icon(imageVector = Icons.Filled.QuestionMark, contentDescription = "Info", modifier = Modifier.padding(3.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    Icon(
+                                        imageVector = Icons.Filled.PriceCheck,
+                                        contentDescription = null,
+                                        tint = roiColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                showRoiTooltip = !showRoiTooltip
+                                            }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.QuestionMark,
+                                            contentDescription = "Info",
+                                            modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
 
                                 AnimatedVisibility(visible = showRoiTooltip) {
-                                    Text("The percentage of your 14-day caloric surpluses that successfully aligned with 'Grind' or 'Upper Body Bias' days for muscle synthesis.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp))
+                                    Text(
+                                        text = "Calculation: (Surpluses on Grind Days / Total Surplus Days) * 100. Measures if 'leakage' is efficiently building muscle or just storing fat.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                                    )
                                 }
 
                                 Spacer(Modifier.height(12.dp))
+
                                 val roiColor = if (fuelEfficiency >= 80) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                Text("Fuel ROI", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
-                                Text("$fuelEfficiency%", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = roiColor)
+                                Text(
+                                    text = "Fuel ROI",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "$fuelEfficiency%",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = roiColor
+                                )
                                 Spacer(Modifier.height(4.dp))
-                                Text(if (fuelEfficiency >= 80) "Capital Efficient" else "High Leakage", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text(
+                                    text = if (fuelEfficiency >= 80) "Capital Efficient" else "High Leakage",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- SECTION 3: ATTRIBUTION & TRENDS ---
+            item {
+                Column(
+                    modifier = elasticMod(2)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "Attribution & Trends",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Momentum Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val isGood = if (phasePreference == "bulk") momentumData.first <= momentumData.second else momentumData.first >= momentumData.second
+                                    val icon = if (momentumData.first > momentumData.second) Icons.Filled.ArrowUpward else if (momentumData.first < momentumData.second) Icons.Filled.ArrowDownward else Icons.Filled.TrendingFlat
+                                    val iconColor = if (isGood) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = iconColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                showMomentumTooltip = !showMomentumTooltip
+                                            }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.QuestionMark,
+                                            contentDescription = "Info",
+                                            modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                AnimatedVisibility(visible = showMomentumTooltip) {
+                                    Text(
+                                        text = "Calculation: Compares your 3-Day Trailing Avg vs 14-Day Trailing Avg. Identifies if your current trend is accelerating or decaying.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                                    )
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(
+                                    text = "Momentum",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                val isGood = if (phasePreference == "bulk") momentumData.first <= momentumData.second else momentumData.first >= momentumData.second
+                                Text(
+                                    text = "${momentumData.first}",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isGood) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "vs ${momentumData.second} (14D)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        // Pareto Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.FilterAlt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                showParetoTooltip = !showParetoTooltip
+                                            }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.QuestionMark,
+                                            contentDescription = "Info",
+                                            modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                AnimatedVisibility(visible = showParetoTooltip) {
+                                    Text(
+                                        text = "Calculation: Identifies the specific Context Tag most mathematically correlated with a failed deficit (surplus) over the last 14 days.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                                    )
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(
+                                    text = "Pareto Leakage",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = paretoLeakage.first,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "${paretoLeakage.second}% of surplus days",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- SECTION 4: COGNITIVE LOAD ---
+            item {
+                Column(
+                    modifier = elasticMod(3)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 40.dp)
+                ) {
+                    Text(
+                        text = "Cognitive Load",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val egoColor = if (frictionData == -1) MaterialTheme.colorScheme.outline else if (frictionData >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    Icon(
+                                        imageVector = Icons.Filled.Psychology,
+                                        contentDescription = null,
+                                        tint = egoColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = "Ego Depletion Matrix",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = egoColor
+                                    )
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            showEgoTooltip = !showEgoTooltip
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.QuestionMark,
+                                        contentDescription = "Info",
+                                        modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            AnimatedVisibility(visible = showEgoTooltip) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.padding(start = 0.dp, top = 12.dp, end = 0.dp, bottom = 0.dp)
+                                ) {
+                                    Text(
+                                        text = "Calculation: Measures your success rate specifically on days tagged 'Load 4' or 'Load 5'. Proves statistically if your adherence drops when your cognitive bandwidth is compromised by work/life demands.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            if (frictionData == -1) {
+                                Text(
+                                    text = "Matrix Inactive. Use the 'Load' picker next to the Date on the Home screen to tag high-stress days.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            } else {
+                                val egoColor = if (frictionData >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                Text(
+                                    text = "$frictionData% Adherence under High Friction",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = egoColor
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = if (frictionData >= 70) "Strong cognitive resilience. You are executing the plan despite systemic stress." else "Ego Depletion confirmed. High friction consistently breaks your adherence. Pre-plan Maintenance calories on high-stress days to prevent failure.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
                             }
                         }
                     }
