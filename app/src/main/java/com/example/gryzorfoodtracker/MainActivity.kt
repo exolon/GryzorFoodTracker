@@ -27,6 +27,10 @@ val Context.dataStore by preferencesDataStore(name = "settings")
 val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
 val CUSTOM_TAGS_KEY = stringSetPreferencesKey("custom_tags")
 val PHASE_MODE_KEY = stringPreferencesKey("phase_mode")
+// --- V4.2 NEW KEYS ---
+val TARGET_WEIGHT_KEY = stringPreferencesKey("target_weight")
+val BANNED_SUGGESTIONS_KEY = stringSetPreferencesKey("banned_suggestions")
+// ---------------------
 val DEFAULT_TAGS = setOf("Grind", "Fasting", "High Protein", "Upper Body Bias")
 
 class MainActivity : ComponentActivity() {

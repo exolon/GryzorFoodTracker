@@ -6,9 +6,11 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -228,24 +230,44 @@ fun LargeDayHeader(
         },
         navigationIcon = {
             IconButton(onClick = onPrev) {
-                Icon(Icons.Filled.ChevronLeft, "Previous", modifier = Modifier.size(32.dp))
+                Icon(
+                    imageVector = Icons.Filled.ChevronLeft,
+                    contentDescription = "Previous",
+                    modifier = Modifier.size(32.dp)
+                )
             }
         },
         actions = {
             IconButton(onClick = onNext) {
-                Icon(Icons.Filled.ChevronRight, "Next", modifier = Modifier.size(32.dp))
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = "Next",
+                    modifier = Modifier.size(32.dp)
+                )
             }
             IconButton(onClick = onBehaviorClick) {
-                Icon(Icons.Filled.Insights, "Behavioral Engine")
+                Icon(
+                    imageVector = Icons.Filled.Insights,
+                    contentDescription = "Behavioral Engine"
+                )
             }
             IconButton(onClick = onAnalyticsClick) {
-                Icon(Icons.Filled.Assessment, "Analytics")
+                Icon(
+                    imageVector = Icons.Filled.Assessment,
+                    contentDescription = "Analytics"
+                )
             }
             IconButton(onClick = onCopy) {
-                Icon(Icons.Filled.Share, "Share Markdown")
+                Icon(
+                    imageVector = Icons.Filled.Share,
+                    contentDescription = "Share Markdown"
+                )
             }
             IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Filled.Settings, "Options")
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Options"
+                )
             }
         },
         scrollBehavior = scrollBehavior,
@@ -270,8 +292,14 @@ fun MealCard(
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = {
             when (it) {
-                SwipeToDismissBoxValue.EndToStart -> { onDelete(); true }
-                SwipeToDismissBoxValue.StartToEnd -> { onDuplicate(); false }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    onDelete()
+                    true
+                }
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    onDuplicate()
+                    false
+                }
                 else -> false
             }
         }
@@ -311,15 +339,15 @@ fun MealCard(
             ) {
                 if (direction == SwipeToDismissBoxValue.EndToStart) {
                     Icon(
-                        Icons.Filled.DeleteSweep,
-                        "Delete",
+                        imageVector = Icons.Filled.DeleteSweep,
+                        contentDescription = "Delete",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.align(Alignment.CenterEnd)
                     )
                 } else if (direction == SwipeToDismissBoxValue.StartToEnd) {
                     Icon(
-                        Icons.Filled.ContentCopy,
-                        "Duplicate",
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = "Duplicate",
                         tint = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.align(Alignment.CenterStart)
                     )
@@ -351,8 +379,8 @@ fun MealCard(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                            RoundedCornerShape(16.dp)
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(16.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -363,7 +391,9 @@ fun MealCard(
                         modifier = Modifier.size(24.dp)
                     )
                 }
+
                 Spacer(modifier = Modifier.width(16.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = entry.type.uppercase(),
@@ -376,6 +406,7 @@ fun MealCard(
                         fontWeight = FontWeight.Medium
                     )
                 }
+
                 Text(
                     text = entry.time,
                     style = MaterialTheme.typography.labelLarge,
@@ -386,7 +417,7 @@ fun MealCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddMealDialog(
     existingMeal: MealEntity?,
@@ -394,6 +425,8 @@ fun AddMealDialog(
     initialTimeOverride: String?,
     initialDesc: String?,
     isDuplicating: Boolean,
+    bannedSuggestions: Set<String>,
+    onBanSuggestion: (String) -> Unit,
     dao: MealDao,
     onDismiss: () -> Unit,
     onSave: (String, String, String) -> Unit
@@ -408,6 +441,7 @@ fun AddMealDialog(
     val mealTypes = listOf("Breakfast", "Lunch", "Dinner", "Snack")
 
     var showTimePicker by remember { mutableStateOf(false) }
+    var suggestionToBan by remember { mutableStateOf<String?>(null) }
 
     val timePickerState = rememberTimePickerState(
         initialHour = mealTime.split(":")[0].toIntOrNull() ?: LocalTime.now().hour,
@@ -416,7 +450,36 @@ fun AddMealDialog(
     )
 
     val historicalSuggestions by dao.getSuggestions(selectedMealType).collectAsState(initial = emptyList())
-    val filteredSuggestions = historicalSuggestions.filter { it.contains(mealText, ignoreCase = true) && it != mealText }
+
+    // Filter out suggestions that match the current text OR are on the banned list
+    val filteredSuggestions = historicalSuggestions.filter {
+        it.contains(mealText, ignoreCase = true) &&
+                it != mealText &&
+                !bannedSuggestions.contains(it)
+    }
+
+    if (suggestionToBan != null) {
+        AlertDialog(
+            onDismissRequest = { suggestionToBan = null },
+            title = { Text("Remove Suggestion") },
+            text = { Text("Hide '$suggestionToBan' from future suggestions?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onBanSuggestion(suggestionToBan!!)
+                        suggestionToBan = null
+                    }
+                ) {
+                    Text("Hide", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { suggestionToBan = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -442,7 +505,13 @@ fun AddMealDialog(
                 AssistChip(
                     onClick = { showTimePicker = true },
                     label = { Text("At $mealTime", style = MaterialTheme.typography.bodyLarge) },
-                    leadingIcon = { Icon(Icons.Default.Schedule, null, modifier = Modifier.size(18.dp)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
                     shape = RoundedCornerShape(12.dp)
                 )
 
@@ -454,7 +523,13 @@ fun AddMealDialog(
                             selected = selectedMealType == type,
                             onClick = { selectedMealType = type },
                             label = { Text(type) },
-                            leadingIcon = { Icon(getMealIcon(type), null, modifier = Modifier.size(18.dp)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = getMealIcon(type),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
                             shape = RoundedCornerShape(12.dp)
                         )
                     }
@@ -479,10 +554,23 @@ fun AddMealDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredSuggestions) { suggestion ->
-                            SuggestionChip(
-                                onClick = { mealText = suggestion },
-                                label = { Text(suggestion) }
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .combinedClickable(
+                                        onClick = { mealText = suggestion },
+                                        onLongClick = { suggestionToBan = suggestion }
+                                    )
+                            ) {
+                                Text(
+                                    text = suggestion,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -493,10 +581,16 @@ fun AddMealDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { if (mealText.isNotBlank()) onSave(mealTime, selectedMealType, mealText) },
+                        onClick = {
+                            if (mealText.isNotBlank()) {
+                                onSave(mealTime, selectedMealType, mealText)
+                            }
+                        },
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Save Entry")
@@ -510,10 +604,14 @@ fun AddMealDialog(
         DatePickerDialog(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
-                TextButton(onClick = {
-                    mealTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
-                    showTimePicker = false
-                }) { Text("OK") }
+                TextButton(
+                    onClick = {
+                        mealTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
+                        showTimePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
             }
         ) {
             TimePicker(

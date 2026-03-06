@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,6 +27,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.datastore.preferences.core.edit
@@ -53,6 +55,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     val phasePreference by context.dataStore.data
         .map { it[PHASE_MODE_KEY] ?: "cut" }
         .collectAsState("cut")
+
+    val targetWeightStr by context.dataStore.data
+        .map { it[TARGET_WEIGHT_KEY] ?: "" }
+        .collectAsState("")
 
     val customTags by context.dataStore.data
         .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
@@ -85,9 +91,13 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             inputStream.copyTo(outputStream)
                         }
                     }
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Database Exported", Toast.LENGTH_SHORT).show() }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Database Exported", Toast.LENGTH_SHORT).show()
+                    }
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Export Failed", Toast.LENGTH_SHORT).show() }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Export Failed", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -114,7 +124,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
 
                     withContext(Dispatchers.Main) { requiresRestart = true }
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Import Failed", Toast.LENGTH_SHORT).show() }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Import Failed", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -127,12 +139,16 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             title = { Text("Import Successful") },
             text = { Text("The database has been restored. The app must restart to apply the changes safely.") },
             confirmButton = {
-                Button(onClick = {
-                    val intent = Intent(context, MainActivity::class.java)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    context.startActivity(intent)
-                    Runtime.getRuntime().exit(0)
-                }) { Text("Restart App") }
+                Button(
+                    onClick = {
+                        val intent = Intent(context, MainActivity::class.java)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        context.startActivity(intent)
+                        Runtime.getRuntime().exit(0)
+                    }
+                ) {
+                    Text("Restart App")
+                }
             }
         )
     }
@@ -144,24 +160,45 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     item {
-                        Text("The Capture Engine", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Voice Input: Hold the Mic button, say 'Snack, an apple at 4 pm', and let the AI parse the rest.\n• Gestures: Swipe a meal left to delete. Swipe right to instantly duplicate it.", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "The Capture Engine",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• Voice Input: Hold the Mic button, say 'Snack, an apple at 4 pm', and let the AI parse the rest.\n• Gestures: Swipe a meal left to delete. Swipe right to instantly duplicate it.\n• Long-Press: Hold down a suggested meal chip to banish typos from your history.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
                         Spacer(Modifier.height(12.dp))
-                        Text("The Context Layer", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).", style = MaterialTheme.typography.bodyMedium)
+
+                        Text(
+                            text = "The Context Layer",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
                         Spacer(Modifier.height(12.dp))
-                        Text("The AI Loop", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Weekly Strategic Review: Export your trailing 7 days (including your weight/fat inputs) to your AI for high-level pattern recognition.", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Analytics Dashboard", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Features: View your 14-day Macro Trend, Body Comp Trend, Trajectory Engine, and Behavioral Compliance Matrix.", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Behavioral Engine", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.", style = MaterialTheme.typography.bodyMedium)
+
+                        Text(
+                            text = "Behavioral Engine",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 14-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' to 'Rest' tags.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showManual = false }) { Text("Close") } }
+            confirmButton = {
+                TextButton(onClick = { showManual = false }) { Text("Close") }
+            }
         )
     }
 
@@ -172,30 +209,28 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.1" to "The UX Polish Pass: Added explicit Help Tooltips to all charts and behavioral metrics. Isolated 'Cognitive Load' into a dedicated Dropdown Header Picker, decoupling it from the Tag UI without touching the DB schema.",
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
-                        "v3.9" to "The Reporting Pass: Enhanced native PDF export with scaled vector line-graphs for Macros and Body Composition. Fully mapped Historical Version Log.",
-                        "v3.8" to "The Executive Pass: Added Dietary Phase toggling (Cut vs Bulk), Heatmap navigation, Haptic Chart Scrubbing, and single-page PDF generation.",
-                        "v3.7" to "The Polish Pass: Restored core UI stability, fixed content clipping under App Bars, bound Heatmap to 30-day wrap logic.",
-                        "v3.6" to "The Bright Pass: Added 3 Light Themes, dialed down Parallax physics, and restored Heatmap.",
-                        "v3.5" to "The Bleeding Edge Pass: Hardware Gyroscope Parallax, Kinetic Typography font morphing, and transparent Glass headers.",
-                        "v3.4" to "The Aura Update: Added Apple-Health style gradient engine, number tickers, and fluid container morphs.",
-                        "v3.3" to "The Kinesthetic Pass: Animated canvas charting and Haptic Feedback engine integration.",
-                        "v3.2" to "Architecture Pass: Finalized decoupled structure with dedicated Home, Analytics, and Settings environments.",
-                        "v3.1" to "The Storage Pass: Transitioned away from Datastore and introduced Room Database for persistent relational storage.",
-                        "v3.0" to "The Framework Pass: Full migration from XML to Jetpack Compose.",
-                        "v2.0" to "The Insight Pass: Added basic data visualization and charting.",
-                        "v1.0" to "Initial Release: Basic text-based food tracking capabilities."
+                        "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio, and Long-Press Suggestion Banishment.",
+                        "v4.1" to "The UX Polish Pass: Added explicit Help Tooltips to all charts and behavioral metrics. Isolated 'Cognitive Load' into a dedicated Dropdown Header Picker.",
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
                     )
                     items(logs) { (version, notes) ->
                         Column(modifier = Modifier.padding(bottom = 16.dp)) {
-                            Text(version, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Text(notes, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = version,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = notes,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showChangelog = false }) { Text("Close") } }
+            confirmButton = {
+                TextButton(onClick = { showChangelog = false }) { Text("Close") }
+            }
         )
     }
 
@@ -239,9 +274,12 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Appearance",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-
                     val themeOptions = listOf(
                         Triple("system", "Follow System", Icons.Filled.SettingsBrightness),
                         Triple("dark", "Dark Mode (OLED)", Icons.Filled.DarkMode),
@@ -251,26 +289,36 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         Triple("clinical", "Clinical Glass", Icons.Filled.MedicalServices),
                         Triple("monochrome", "Monochrome", Icons.Filled.Contrast)
                     )
-
                     themeOptions.forEach { (key, label, icon) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { coroutineScope.launch { context.dataStore.edit { it[THEME_MODE_KEY] = key } } }
+                                .clickable {
+                                    coroutineScope.launch {
+                                        context.dataStore.edit { it[THEME_MODE_KEY] = key }
+                                    }
+                                }
                                 .padding(horizontal = 24.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(selected = themePreference == key, onClick = null)
                             Spacer(Modifier.width(16.dp))
-                            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Spacer(Modifier.width(16.dp))
-                            Text(label, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
                         }
                     }
                 }
             }
 
-            // --- PHASE TOGGLE SECTION ---
+            // --- GOALS & PHASE SECTION ---
             item {
                 Column(modifier = elasticMod(1)) {
                     HorizontalDivider(
@@ -282,49 +330,85 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.SwapVert,
+                            imageVector = Icons.Filled.CrisisAlert,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Dietary Phase", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Physical Goals",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
 
-                    Text(
-                        text = "Defines how the Analytics Engine interprets your success metrics.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 8.dp)
+                    OutlinedTextField(
+                        value = targetWeightStr,
+                        onValueChange = { newVal ->
+                            coroutineScope.launch {
+                                context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal }
+                            }
+                        },
+                        label = { Text("Target Body Weight (kg)") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { coroutineScope.launch { context.dataStore.edit { it[PHASE_MODE_KEY] = "cut" } } }
+                            .clickable {
+                                coroutineScope.launch {
+                                    context.dataStore.edit { it[PHASE_MODE_KEY] = "cut" }
+                                }
+                            }
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = phasePreference == "cut", onClick = null)
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text("Cut Mode", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                            Text("A caloric deficit is considered a success.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                            Text(
+                                text = "Cut Mode",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "A caloric deficit is considered a success.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.outline
+                            )
                         }
                     }
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { coroutineScope.launch { context.dataStore.edit { it[PHASE_MODE_KEY] = "bulk" } } }
+                            .clickable {
+                                coroutineScope.launch {
+                                    context.dataStore.edit { it[PHASE_MODE_KEY] = "bulk" }
+                                }
+                            }
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = phasePreference == "bulk", onClick = null)
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text("Bulk Mode", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                            Text("A caloric surplus is considered a success.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                            Text(
+                                text = "Bulk Mode",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "A caloric surplus is considered a success.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.outline
+                            )
                         }
                     }
                 }
@@ -348,11 +432,16 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Context Tags", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Context Tags",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
@@ -367,12 +456,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         Button(
                             onClick = {
                                 if (newTagText.isNotBlank()) {
-                                    val tagToAdd = newTagText.trim()
                                     coroutineScope.launch {
                                         context.dataStore.edit { prefs ->
-                                            val current = prefs[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS
-                                            val updatedSet = HashSet(current)
-                                            updatedSet.add(tagToAdd)
+                                            val updatedSet = HashSet(prefs[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS)
+                                            updatedSet.add(newTagText.trim())
                                             prefs[CUSTOM_TAGS_KEY] = updatedSet
                                         }
                                     }
@@ -402,14 +489,19 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         onClick = {
                             coroutineScope.launch {
                                 context.dataStore.edit { prefs ->
-                                    val current = prefs[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS
-                                    val updatedSet = HashSet(current)
+                                    val updatedSet = HashSet(prefs[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS)
                                     updatedSet.remove(tag)
                                     prefs[CUSTOM_TAGS_KEY] = updatedSet
                                 }
                             }
                         }
-                    ) { Icon(Icons.Filled.Close, "Remove Tag", tint = MaterialTheme.colorScheme.error) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Remove Tag",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
@@ -431,9 +523,12 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Data Management", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Data Management",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -441,11 +536,17 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.CloudUpload, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            imageVector = Icons.Filled.CloudUpload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(Modifier.width(16.dp))
-                        Text("Export Database", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "Export Database",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -453,57 +554,16 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            imageVector = Icons.Filled.CloudDownload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(Modifier.width(16.dp))
-                        Text("Import Database", style = MaterialTheme.typography.bodyLarge)
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                coroutineScope.launch(Dispatchers.IO) {
-                                    val fakeToday = LocalDate.now()
-                                    for (i in 0..29) {
-                                        val d = fakeToday.minusDays(i.toLong()).toString()
-                                        val isGrind = i % 3 != 0
-                                        val isFasting = i % 7 == 0
-
-                                        if (!isFasting) {
-                                            dao.insertMeal(MealEntity(UUID.randomUUID().toString(), d, "08:30", "Breakfast", "Oatmeal with whey protein and berries"))
-                                            dao.insertMeal(MealEntity(UUID.randomUUID().toString(), d, "13:00", "Lunch", "Grilled chicken breast, sweet potato, and broccoli"))
-                                            dao.insertMeal(MealEntity(UUID.randomUUID().toString(), d, "19:30", "Dinner", "Salmon salad with olive oil dressing"))
-                                            if (isGrind) dao.insertMeal(MealEntity(UUID.randomUUID().toString(), d, "16:00", "Snack", "Protein shake and an apple"))
-                                        } else {
-                                            dao.insertMeal(MealEntity(UUID.randomUUID().toString(), d, "19:00", "Dinner", "Massive steak and roasted veg (OMAD)"))
-                                        }
-
-                                        val tags = mutableListOf<String>()
-                                        if (isGrind) tags.add("Grind") else tags.add("Rest")
-                                        if (isFasting) tags.add("Fasting")
-                                        if (i % 4 == 0) tags.add("Upper Body Bias")
-                                        dao.insertTags(DailyTagEntity(d, tags.joinToString(", ")))
-
-                                        val kcal = if (isFasting) "1800" else if (isGrind) "2600" else "2200"
-                                        val def = if (isFasting) "800" else if (isGrind) "500" else "-100"
-                                        dao.insertMetric(DailyMetricEntity(d, kcal, def))
-
-                                        val weight = String.format("%.1f", 75.0f + (i * 0.1f))
-                                        val bf = String.format("%.1f", 16.0f + (i * 0.05f))
-                                        dao.insertMeasurement(MeasurementEntity(d, weight, bf))
-
-                                        val insightText = if (isGrind) "Excellent adherence to macros on a Grind day. Your Upper Body Bias protocol is keeping the deficit high without taxing the legs." else "Rest day caloric surplus noted. Keep an eye on carb intake tomorrow to compensate."
-                                        dao.insertInsight(DailyInsightEntity(d, insightText))
-                                    }
-                                    withContext(Dispatchers.Main) { Toast.makeText(context, "30-Day Test Data Injected!", Toast.LENGTH_LONG).show() }
-                                }
-                            }
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.width(16.dp))
-                        Text("Seed 30-Day Test Data", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            text = "Import Database",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
                 }
             }
@@ -516,20 +576,40 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { showManual = true }.padding(horizontal = 24.dp, vertical = 16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showManual = true }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = Icons.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(Modifier.width(16.dp))
-                        Text("App Manual", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "App Manual",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { showChangelog = true }.padding(horizontal = 24.dp, vertical = 16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showChangelog = true }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(Modifier.width(16.dp))
-                        Text("View Changelog", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "View Changelog",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
                 }
             }
@@ -537,16 +617,18 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             // --- APP VERSION FOOTER ---
             item {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(start = 0.dp, top = 24.dp, end = 0.dp, bottom = 40.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 0.dp, top = 24.dp, end = 0.dp, bottom = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Gryzor Food Tracker",
+                        text = "Gryzor Food Tracker",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        "v4.1",
+                        text = "v4.2",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

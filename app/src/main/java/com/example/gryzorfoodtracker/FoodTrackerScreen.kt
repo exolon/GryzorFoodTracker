@@ -14,6 +14,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.datastore.preferences.core.edit
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -61,6 +63,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -155,6 +158,10 @@ fun FoodTrackerScreen(
     val currentDayMeasurement by dao.getMeasurementForDate(currentDate.toString()).collectAsState(initial = null)
 
     val availableTags by context.dataStore.data.map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }.collectAsState(DEFAULT_TAGS)
+
+    // --- V4.2 BANNED SUGGESTIONS IMPORT ---
+    val bannedSuggestions by context.dataStore.data.map { it[BANNED_SUGGESTIONS_KEY] ?: emptySet() }.collectAsState(emptySet())
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -172,7 +179,10 @@ fun FoodTrackerScreen(
         if (result.resultCode == Activity.RESULT_OK) {
             val data = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
             val spokenText = data?.get(0) ?: ""
-            val (parsedType, parsedTime, parsedDesc) = parseVoiceInput(spokenText, LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")))
+            val (parsedType, parsedTime, parsedDesc) = parseVoiceInput(
+                spokenText,
+                LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+            )
             initialDialogMealType = parsedType
             initialDialogTime = parsedTime
             initialDialogDesc = parsedDesc
@@ -223,7 +233,6 @@ fun FoodTrackerScreen(
         label = "blur"
     )
 
-    // --- V4.1 HEADER TAG SEPARATION ---
     val headerTagsStr = currentDayTags?.tags ?: ""
     val headerTagsList = headerTagsStr.split(",").map { it.trim() }.filter { it.isNotBlank() }
     val headerFriction = headerTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
@@ -270,13 +279,13 @@ fun FoodTrackerScreen(
                     onNext = { coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
                     onCopy = {
                         copyToClipboard(
-                            context,
-                            currentDayEntries,
-                            currentDate,
-                            currentDayTags?.tags,
-                            currentDayInsight?.insight,
-                            currentDayMetrics,
-                            currentDayMeasurement
+                            context = context,
+                            entries = currentDayEntries,
+                            date = currentDate,
+                            tags = currentDayTags?.tags,
+                            insight = currentDayInsight?.insight,
+                            metrics = currentDayMetrics,
+                            comp = currentDayMeasurement
                         )
                     }
                 )
@@ -291,7 +300,10 @@ fun FoodTrackerScreen(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Filled.Mic, contentDescription = "Voice Input")
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = "Voice Input"
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -309,7 +321,10 @@ fun FoodTrackerScreen(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Add Meal")
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add Meal"
+                        )
                     }
                 }
             }
@@ -327,7 +342,41 @@ fun FoodTrackerScreen(
                 val pageMetrics by dao.getMetricsForDate(pageDate).collectAsState(initial = null)
                 val pageMeasurement by dao.getMeasurementForDate(pageDate).collectAsState(initial = null)
 
-                // --- V4.1 UI TAG SEPARATION ---
+                // --- V4.2 CHRONO-BIOLOGY FASTING ENGINE ---
+                val prevDayDate = LocalDate.parse(pageDate).minusDays(1).toString()
+                val prevDayEntries by dao.getMealsForDate(prevDayDate).collectAsState(initial = emptyList())
+                val prevLastMeal = prevDayEntries.maxByOrNull { it.time }
+                val currFirstMeal = pageEntries.minByOrNull { it.time }
+
+                var fastingDuration by remember(prevLastMeal, currFirstMeal) {
+                    mutableStateOf("--")
+                }
+
+                LaunchedEffect(prevLastMeal, currFirstMeal) {
+                    if (prevLastMeal != null && currFirstMeal != null) {
+                        try {
+                            val dt1 = LocalDateTime.of(
+                                LocalDate.parse(prevDayDate),
+                                LocalTime.parse(prevLastMeal.time, DateTimeFormatter.ofPattern("HH:mm"))
+                            )
+                            val dt2 = LocalDateTime.of(
+                                LocalDate.parse(pageDate),
+                                LocalTime.parse(currFirstMeal.time, DateTimeFormatter.ofPattern("HH:mm"))
+                            )
+                            val mins = ChronoUnit.MINUTES.between(dt1, dt2)
+                            if (mins > 0) {
+                                fastingDuration = "${mins / 60}h ${mins % 60}m"
+                            } else {
+                                fastingDuration = "--"
+                            }
+                        } catch (e: Exception) {
+                            fastingDuration = "--"
+                        }
+                    } else {
+                        fastingDuration = "--"
+                    }
+                }
+
                 val activeTagsList = pageTags?.tags?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                 val visualTags = activeTagsList.filter { !it.startsWith("Friction:") }
 
@@ -460,6 +509,7 @@ fun FoodTrackerScreen(
                                     var inputWeight by remember(pageMeasurement?.weight) { mutableStateOf(pageMeasurement?.weight ?: "") }
                                     var inputFat by remember(pageMeasurement?.bodyFat) { mutableStateOf(pageMeasurement?.bodyFat ?: "") }
                                     var isCardFocused by remember { mutableStateOf(false) }
+                                    var showFastTooltip by remember { mutableStateOf(false) }
 
                                     Surface(
                                         modifier = Modifier
@@ -474,18 +524,54 @@ fun FoodTrackerScreen(
                                                 .padding(20.dp)
                                                 .onFocusChanged { isCardFocused = it.hasFocus }
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.AutoAwesome,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.secondary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Spacer(Modifier.width(8.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.AutoAwesome,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.secondary,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(
+                                                        text = "Daily Summary & AI",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = MaterialTheme.colorScheme.secondary
+                                                    )
+                                                }
+
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.clickable {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        showFastTooltip = !showFastTooltip
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Timer,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.outline,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "Fast: $fastingDuration",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                            }
+
+                                            AnimatedVisibility(visible = showFastTooltip) {
                                                 Text(
-                                                    text = "Daily Summary & AI",
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    color = MaterialTheme.colorScheme.secondary
+                                                    text = "Calculation: Measures the time elapsed between your final meal logged yesterday and your first meal logged today.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.padding(top = 8.dp)
                                                 )
                                             }
 
@@ -598,7 +684,10 @@ fun FoodTrackerScreen(
                                                     }
                                                 },
                                                 placeholder = {
-                                                    Text("Paste AI conclusions here...", color = MaterialTheme.colorScheme.outline)
+                                                    Text(
+                                                        text = "Paste AI conclusions here...",
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
                                                 },
                                                 modifier = Modifier.fillMaxWidth(),
                                                 textStyle = MaterialTheme.typography.bodyLarge,
@@ -612,14 +701,20 @@ fun FoodTrackerScreen(
 
                                             if (isCardFocused) {
                                                 Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(top = 4.dp),
                                                     horizontalArrangement = Arrangement.End
                                                 ) {
                                                     TextButton(
                                                         onClick = { focusManager.clearFocus() },
                                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                                                     ) {
-                                                        Text("OK", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                                                        Text(
+                                                            text = "OK",
+                                                            color = MaterialTheme.colorScheme.secondary,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
                                                     }
                                                 }
                                             }
@@ -661,6 +756,17 @@ fun FoodTrackerScreen(
                         initialTimeOverride = initialDialogTime,
                         initialDesc = initialDialogDesc,
                         isDuplicating = duplicatingMeal != null,
+                        bannedSuggestions = bannedSuggestions,
+                        onBanSuggestion = { bannedText ->
+                            coroutineScope.launch {
+                                context.dataStore.edit { prefs ->
+                                    val current = prefs[BANNED_SUGGESTIONS_KEY] ?: emptySet()
+                                    val updatedSet = HashSet(current)
+                                    updatedSet.add(bannedText)
+                                    prefs[BANNED_SUGGESTIONS_KEY] = updatedSet
+                                }
+                            }
+                        },
                         dao = dao,
                         onDismiss = { showAddDialog = false },
                         onSave = { timeNow, selectedType, text ->

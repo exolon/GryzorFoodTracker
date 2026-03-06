@@ -14,7 +14,9 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.PriceCheck
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.QuestionMark
@@ -35,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -51,8 +55,13 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
         .map { it[PHASE_MODE_KEY] ?: "cut" }
         .collectAsState(initial = "cut")
 
+    val targetWeightStr by context.dataStore.data
+        .map { it[TARGET_WEIGHT_KEY] ?: "" }
+        .collectAsState(initial = "")
+
     val allMetrics by dao.getAllMetrics().collectAsState(initial = emptyList())
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
+    val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
 
     val last14Days = remember(today) { (13 downTo 0).map { today.minusDays(it.toLong()).toString() } }
     val daysReversed = remember(last14Days) { last14Days.reversed() }
@@ -107,10 +116,16 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
     }
 
     val momentumData = remember(daysReversed, allMetrics) {
-        val recent3 = daysReversed.take(3).mapNotNull { date -> allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() }
+        val recent3 = daysReversed.take(3).mapNotNull { date ->
+            allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull()
+        }
         val avg3 = if (recent3.isNotEmpty()) recent3.average() else 0.0
-        val all14 = daysReversed.mapNotNull { date -> allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() }
+
+        val all14 = daysReversed.mapNotNull { date ->
+            allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull()
+        }
         val avg14 = if (all14.isNotEmpty()) all14.average() else 0.0
+
         Pair(avg3.toInt(), avg14.toInt())
     }
 
@@ -130,7 +145,11 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 }
             }
             val worstTag = tagCounts.maxByOrNull { it.value }
-            if (worstTag != null) Pair(worstTag.key, ((worstTag.value.toFloat() / surplusDays.size) * 100).toInt()) else Pair("None", 0)
+            if (worstTag != null) {
+                Pair(worstTag.key, ((worstTag.value.toFloat() / surplusDays.size) * 100).toInt())
+            } else {
+                Pair("None", 0)
+            }
         }
     }
 
@@ -152,9 +171,68 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
         if (highFrictionDays == 0) -1 else ((highFrictionWins.toFloat() / highFrictionDays) * 100).toInt()
     }
 
+    // --- V4.2 RECOVERY DEBT RATIO ---
+    val recoveryDebt = remember(last14Days, allTags) {
+        var grind = 0
+        var rest = 0
+        last14Days.forEach { d ->
+            val t = allTags.find { it.date == d }?.tags ?: ""
+            if (t.contains("Grind", ignoreCase = true)) grind++
+            if (t.contains("Rest", ignoreCase = true)) rest++
+        }
+        val ratio = if (rest == 0) grind.toFloat() else grind.toFloat() / rest
+        Triple(grind, rest, ratio)
+    }
+
+    // --- V4.2 VELOCITY BURN-DOWN FORECAST ---
+    val burnDownForecast = remember(last14Days, allMeasurements, targetWeightStr, phasePreference) {
+        val target = targetWeightStr.toFloatOrNull()
+        val sortedMeasures = last14Days.mapNotNull { d ->
+            allMeasurements.find { it.date == d }?.weight?.toFloatOrNull()?.let { Pair(LocalDate.parse(d), it) }
+        }.sortedBy { it.first }
+
+        if (target == null || sortedMeasures.size < 2) {
+            "Insufficient Data"
+        } else {
+            val first = sortedMeasures.first()
+            val last = sortedMeasures.last()
+            val daysBetween = ChronoUnit.DAYS.between(first.first, last.first)
+
+            if (daysBetween == 0L) {
+                "Calculating..."
+            } else {
+                val dailyVelocity = (last.second - first.second) / daysBetween.toFloat()
+                val weightToGo = target - last.second
+
+                if (phasePreference == "cut") {
+                    if (dailyVelocity >= 0) {
+                        "Velocity Stalled"
+                    } else if (weightToGo >= 0) {
+                        "Target Achieved"
+                    } else {
+                        val daysLeft = (weightToGo / dailyVelocity).toLong()
+                        LocalDate.now().plusDays(daysLeft).format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
+                    }
+                } else {
+                    if (dailyVelocity <= 0) {
+                        "Velocity Stalled"
+                    } else if (weightToGo <= 0) {
+                        "Target Achieved"
+                    } else {
+                        val daysLeft = (weightToGo / dailyVelocity).toLong()
+                        LocalDate.now().plusDays(daysLeft).format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
+                    }
+                }
+            }
+        }
+    }
+
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        entrance.animateTo(1f, animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow))
+        entrance.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow)
+        )
     }
 
     var showBurnoutTooltip by remember { mutableStateOf(false) }
@@ -163,6 +241,8 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
     var showMomentumTooltip by remember { mutableStateOf(false) }
     var showParetoTooltip by remember { mutableStateOf(false) }
     var showEgoTooltip by remember { mutableStateOf(false) }
+    var showRecoveryTooltip by remember { mutableStateOf(false) }
+    var showVelocityTooltip by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -170,7 +250,10 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 title = { Text("Behavioral Engine") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -328,7 +411,6 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // VIX Card
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
@@ -399,7 +481,6 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             }
                         }
 
-                        // ROI Card
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
@@ -491,7 +572,6 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Momentum Card
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
@@ -565,7 +645,6 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             }
                         }
 
-                        // Pareto Card
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
@@ -642,7 +721,7 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 Column(
                     modifier = elasticMod(3)
                         .fillMaxWidth()
-                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 40.dp)
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
                 ) {
                     Text(
                         text = "Cognitive Load",
@@ -735,6 +814,178 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                 Text(
                                     text = if (frictionData >= 70) "Strong cognitive resilience. You are executing the plan despite systemic stress." else "Ego Depletion confirmed. High friction consistently breaks your adherence. Pre-plan Maintenance calories on high-stress days to prevent failure.",
                                     style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- SECTION 5: PHYSIOLOGY & VELOCITY (V4.2) ---
+            item {
+                Column(
+                    modifier = elasticMod(4)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 40.dp)
+                ) {
+                    Text(
+                        text = "Physiology & Velocity",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Recovery Debt Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val ratio = recoveryDebt.third
+                                    val isDeloading = recoveryDebt.first == 0
+                                    val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 2.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
+
+                                    Icon(
+                                        imageVector = Icons.Filled.Hotel,
+                                        contentDescription = null,
+                                        tint = debtColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                showRecoveryTooltip = !showRecoveryTooltip
+                                            }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.QuestionMark,
+                                            contentDescription = "Info",
+                                            modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                AnimatedVisibility(visible = showRecoveryTooltip) {
+                                    Text(
+                                        text = "Calculation: Ratio of 'Grind' to 'Rest' tags over 14 days. Exceeding a 4.0 ratio indicates severe CNS fatigue and triggers a mandatory deload warning.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                                    )
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(
+                                    text = "Recovery Debt",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+
+                                val ratio = recoveryDebt.third
+                                val isDeloading = recoveryDebt.first == 0
+                                val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 2.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
+                                val statusText = if (isDeloading) "Deloading" else if (ratio >= 4.0) "Critical Debt" else if (ratio >= 2.0) "High Strain" else "Sustainable"
+
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = debtColor
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "${recoveryDebt.first} Grind : ${recoveryDebt.second} Rest",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        // Velocity Burn-Down Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val isGood = !burnDownForecast.contains("Stalled") && !burnDownForecast.contains("Insufficient")
+                                    Icon(
+                                        imageVector = Icons.Filled.Event,
+                                        contentDescription = null,
+                                        tint = if (isGood) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                showVelocityTooltip = !showVelocityTooltip
+                                            }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.QuestionMark,
+                                            contentDescription = "Info",
+                                            modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                AnimatedVisibility(visible = showVelocityTooltip) {
+                                    Text(
+                                        text = "Calculation: Trailing 14-day weight velocity projected linearly against your Target Weight (set in Options). Phase-aware (Cut/Bulk).",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                                    )
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(
+                                    text = "Target Horizon",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+
+                                val isGood = !burnDownForecast.contains("Stalled") && !burnDownForecast.contains("Insufficient")
+                                Text(
+                                    text = burnDownForecast,
+                                    style = if (burnDownForecast.length > 15) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isGood) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = if (targetWeightStr.isBlank()) "Set Target in Options" else "Goal: ${targetWeightStr}kg",
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
