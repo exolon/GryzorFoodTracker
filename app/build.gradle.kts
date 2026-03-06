@@ -11,10 +11,10 @@ android {
     defaultConfig {
         applicationId = "com.example.gryzorfoodtracker"
         minSdk = 26
-        targetSdk = 35
-        // --- V4.2 DEPLOYMENT BUMP ---
-        versionCode = 24
-        versionName = "4.2"
+        targetSdk = 36
+        // --- V4.3 DEPLOYMENT BUMP ---
+        versionCode = 25
+        versionName = "4.3"
         // ----------------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

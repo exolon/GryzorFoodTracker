@@ -59,6 +59,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,6 +122,10 @@ fun FoodTrackerScreen(
     var duplicatingMeal by remember { mutableStateOf<MealEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
+    // --- V4.3 MORNING INTENT PROTOCOL STATE ---
+    var showMorningIntent by remember { mutableStateOf(false) }
+    var hasPromptedIntent by rememberSaveable { mutableStateOf(false) }
+
     var initialDialogMealType by remember { mutableStateOf<String?>("Lunch") }
     var initialDialogTime by remember { mutableStateOf<String?>(null) }
     var initialDialogDesc by remember { mutableStateOf<String?>(null) }
@@ -158,8 +164,6 @@ fun FoodTrackerScreen(
     val currentDayMeasurement by dao.getMeasurementForDate(currentDate.toString()).collectAsState(initial = null)
 
     val availableTags by context.dataStore.data.map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }.collectAsState(DEFAULT_TAGS)
-
-    // --- V4.2 BANNED SUGGESTIONS IMPORT ---
     val bannedSuggestions by context.dataStore.data.map { it[BANNED_SUGGESTIONS_KEY] ?: emptySet() }.collectAsState(emptySet())
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -173,6 +177,19 @@ fun FoodTrackerScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // --- V4.3 MORNING INTENT TRIGGER ---
+    LaunchedEffect(currentDate) {
+        if (currentDate == LocalDate.now() && !hasPromptedIntent) {
+            // Wait a brief moment for smooth UX and to ensure DB stream is ready
+            delay(300)
+            val tags = dao.getTagsForDate(currentDate.toString()).first()
+            if (tags == null || tags.tags.isBlank()) {
+                showMorningIntent = true
+            }
+            hasPromptedIntent = true
+        }
     }
 
     val speechRecognizerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -223,12 +240,12 @@ fun FoodTrackerScreen(
     }
 
     val appScale by animateFloatAsState(
-        targetValue = if (showAddDialog) 0.94f else 1f,
+        targetValue = if (showAddDialog || showMorningIntent) 0.94f else 1f,
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "scale"
     )
     val appBlur by animateDpAsState(
-        targetValue = if (showAddDialog) 16.dp else 0.dp,
+        targetValue = if (showAddDialog || showMorningIntent) 16.dp else 0.dp,
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "blur"
     )
@@ -247,7 +264,7 @@ fun FoodTrackerScreen(
                 .scale(appScale)
                 .graphicsLayer {
                     clip = true
-                    shape = RoundedCornerShape(if (showAddDialog) 32.dp else 0.dp)
+                    shape = RoundedCornerShape(if (showAddDialog || showMorningIntent) 32.dp else 0.dp)
                 }
                 .blur(
                     radius = appBlur,
@@ -342,7 +359,6 @@ fun FoodTrackerScreen(
                 val pageMetrics by dao.getMetricsForDate(pageDate).collectAsState(initial = null)
                 val pageMeasurement by dao.getMeasurementForDate(pageDate).collectAsState(initial = null)
 
-                // --- V4.2 CHRONO-BIOLOGY FASTING ENGINE ---
                 val prevDayDate = LocalDate.parse(pageDate).minusDays(1).toString()
                 val prevDayEntries by dao.getMealsForDate(prevDayDate).collectAsState(initial = emptyList())
                 val prevLastMeal = prevDayEntries.maxByOrNull { it.time }
@@ -728,6 +744,7 @@ fun FoodTrackerScreen(
             }
         }
 
+        // --- ADD MEAL DIALOG ---
         AnimatedVisibility(
             visible = showAddDialog,
             enter = scaleIn(
@@ -782,6 +799,39 @@ fun FoodTrackerScreen(
                         }
                     )
                 }
+            }
+        }
+
+        // --- MORNING INTENT DIALOG ---
+        AnimatedVisibility(
+            visible = showMorningIntent,
+            enter = scaleIn(
+                initialScale = 0.8f,
+                animationSpec = tween(400, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(400)),
+            exit = scaleOut(
+                targetScale = 0.8f,
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeOut(tween(300)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .pointerInput(Unit) { detectTapGestures {} },
+                contentAlignment = Alignment.Center
+            ) {
+                MorningIntentDialog(
+                    onDismiss = { showMorningIntent = false },
+                    onSave = { tagsToSave ->
+                        coroutineScope.launch(Dispatchers.IO) {
+                            dao.insertTags(DailyTagEntity(currentDate.toString(), tagsToSave))
+                            MacroWidget().updateAll(context)
+                        }
+                        showMorningIntent = false
+                    }
+                )
             }
         }
     }

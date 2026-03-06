@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -15,6 +16,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,7 +28,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -451,7 +455,6 @@ fun AddMealDialog(
 
     val historicalSuggestions by dao.getSuggestions(selectedMealType).collectAsState(initial = emptyList())
 
-    // Filter out suggestions that match the current text OR are on the banned list
     val filteredSuggestions = historicalSuggestions.filter {
         it.contains(mealText, ignoreCase = true) &&
                 it != mealText &&
@@ -618,6 +621,234 @@ fun AddMealDialog(
                 state = timePickerState,
                 modifier = Modifier.padding(24.dp)
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MorningIntentDialog(
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var frictionLevel by remember { mutableIntStateOf(0) }
+    var selectedIntent by remember { mutableStateOf<String?>(null) }
+    var isCompromised by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Morning Intent",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showHelp = !showHelp
+                            }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.QuestionMark,
+                            contentDescription = "Info",
+                            modifier = Modifier.padding(4.dp)
+                        )
+                    }
+                }
+
+                AnimatedVisibility(visible = showHelp) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.padding(top = 16.dp)
+                    ) {
+                        Text(
+                            text = "Implementation Intention: Pre-loading your daily strategy bypasses decision fatigue later. If high cognitive load is detected, the Circuit Breaker will recommend adjusting targets to prevent system burnout.",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = "Current Cognitive Load",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    (1..5).forEach { level ->
+                        val isSelected = frictionLevel == level
+                        val containerColor = if (isSelected && level >= 4) MaterialTheme.colorScheme.errorContainer
+                        else if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+
+                        val contentColor = if (isSelected && level >= 4) MaterialTheme.colorScheme.onErrorContainer
+                        else if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+
+                        Surface(
+                            shape = CircleShape,
+                            color = containerColor,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    frictionLevel = level
+                                }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "$level",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = contentColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = frictionLevel >= 4) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.BatteryAlert,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = "Circuit Breaker Active. High stress detected. Tactical Maintenance recommended today.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = "Physical Intent",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Grind", "Rest", "Fasting").forEach { intent ->
+                        FilterChip(
+                            selected = selectedIntent == intent,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedIntent = intent
+                                if (intent != "Grind") isCompromised = false
+                            },
+                            label = { Text(intent) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+
+                AnimatedVisibility(visible = selectedIntent == "Grind") {
+                    Column(modifier = Modifier.padding(top = 16.dp)) {
+                        Text(
+                            text = "Leg Status",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = !isCompromised,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    isCompromised = false
+                                },
+                                label = { Text("Standard") },
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            FilterChip(
+                                selected = isCompromised,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    isCompromised = true
+                                },
+                                label = { Text("Compromised (Upper Bias)") },
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(32.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Skip")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val tagsToSave = mutableListOf<String>()
+                            if (frictionLevel > 0) {
+                                tagsToSave.add("Friction: $frictionLevel")
+                            }
+                            if (selectedIntent != null) {
+                                tagsToSave.add(selectedIntent!!)
+                            }
+                            if (selectedIntent == "Grind" && isCompromised) {
+                                tagsToSave.add("Upper Body Bias")
+                            }
+                            onSave(tagsToSave.joinToString(","))
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = selectedIntent != null || frictionLevel > 0
+                    ) {
+                        Text("Lock Intent")
+                    }
+                }
+            }
         }
     }
 }

@@ -178,7 +178,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).",
+                            text = "• Morning Intent: A daily modal prompting you to pre-load your physical strategy and cognitive load upon waking.\n• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).",
                             style = MaterialTheme.typography.bodyMedium
                         )
 
@@ -190,7 +190,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 14-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' to 'Rest' tags.",
+                            text = "• Circuit Breaker: Automatically recommends tactical maintenance if Cognitive Load is logged at a 4 or 5.\n• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 14-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' to 'Rest' tags.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -209,6 +209,8 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        // --- V4.3 CHANGELOG ADDITION ---
+                        "v4.3" to "The Intent Pass: Added the Morning Intent Protocol to pre-load daily strategy, and the Cognitive Circuit Breaker to automatically recommend tactical maintenance on high-stress days.",
                         "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio, and Long-Press Suggestion Banishment.",
                         "v4.1" to "The UX Polish Pass: Added explicit Help Tooltips to all charts and behavioral metrics. Isolated 'Cognitive Load' into a dedicated Dropdown Header Picker.",
                         "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
@@ -627,8 +629,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.outline
                     )
+                    // --- V4.3 BUMP ---
                     Text(
-                        text = "v4.2",
+                        text = "v4.3",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

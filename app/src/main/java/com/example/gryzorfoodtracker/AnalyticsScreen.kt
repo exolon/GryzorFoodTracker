@@ -78,6 +78,11 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
         .map { it[PHASE_MODE_KEY] ?: "cut" }
         .collectAsState(initial = "cut")
 
+    // --- V4.2 SELF-HEALING MATRIX IMPORT ---
+    val customTags by context.dataStore.data
+        .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
+        .collectAsState(initial = DEFAULT_TAGS)
+
     val (gyroPitch, gyroRoll) = rememberGyroscopeTilt()
 
     val allMetrics by dao.getAllMetrics().collectAsState(initial = emptyList())
@@ -101,12 +106,20 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
     val diffKcal = curKcalAvg - prevKcalAvg
     val diffDef = curDefAvg - prevDefAvg
 
-    val tagStats = remember(allTags, allMetrics, phasePreference) {
+    val tagStats = remember(allTags, allMetrics, phasePreference, customTags) {
         val metricsMap = allMetrics.associateBy { it.date }
         val tagMap = mutableMapOf<String, MutableList<DailyMetricEntity>>()
 
         allTags.forEach { tagEntity ->
-            val dayTags = tagEntity.tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            // FIXED: Exclude Friction tags AND filter out orphaned ghost tags
+            val dayTags = tagEntity.tags.split(",")
+                .map { it.trim() }
+                .filter { tagString ->
+                    tagString.isNotBlank() &&
+                            !tagString.startsWith("Friction:", ignoreCase = true) &&
+                            customTags.contains(tagString)
+                }
+
             val metricForDay = metricsMap[tagEntity.date]
             if (metricForDay != null) {
                 dayTags.forEach { tag ->
@@ -114,6 +127,7 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                 }
             }
         }
+
         tagMap.map { (tag, metrics) ->
             val totalDays = metrics.size
             val successDays = metrics.count { metric ->
