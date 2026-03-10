@@ -113,6 +113,7 @@ fun BehaviorScreen(
         }
     }
 
+    // --- V4.5 REFINED BURNOUT MATH ---
     val burnoutRisk = remember(daysReversed, allMetrics, vixScore, phasePreference) {
         if (phasePreference == "bulk") {
             0
@@ -132,7 +133,7 @@ fun BehaviorScreen(
             }
 
             val avgStreakDef = if (streak > 0) recentDeficitSum / streak else 0.0
-            var risk = streak * 10
+            var risk = streak * 5 // Reduced from 10 to soften the curve
 
             if (avgStreakDef > 600) risk += 15
             if (vixScore > 300) risk += 15
@@ -141,11 +142,19 @@ fun BehaviorScreen(
         }
     }
 
+    // --- V4.5 WEIGHTED MOVING AVERAGE MOMENTUM ---
     val momentumData = remember(daysReversed, allMetrics) {
-        val recent3 = daysReversed.take(3).mapNotNull { date ->
-            allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull()
+        val recent3 = daysReversed.take(3).map { date ->
+            allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
         }
-        val avg3 = if (recent3.isNotEmpty()) recent3.average() else 0.0
+
+        val avg3 = if (recent3.size == 3) {
+            (recent3[0] * 0.50) + (recent3[1] * 0.33) + (recent3[2] * 0.17)
+        } else if (recent3.isNotEmpty()) {
+            recent3.average()
+        } else {
+            0.0
+        }
 
         val all14 = daysReversed.mapNotNull { date ->
             allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull()
@@ -214,18 +223,23 @@ fun BehaviorScreen(
         }
     }
 
+    // --- V4.5 RECOVERY DEBT MATH FIX ---
     val recoveryDebt = remember(last14Days, allTags) {
         var grind = 0
-        var rest = 0
+        var restAndRecovery = 0
 
         last14Days.forEach { d ->
             val t = allTags.find { it.date == d }?.tags ?: ""
-            if (t.contains("Grind", ignoreCase = true)) grind++
-            if (t.contains("Rest", ignoreCase = true)) rest++
+            if (t.contains("Grind", ignoreCase = true)) {
+                grind++
+            }
+            if (t.contains("Rest", ignoreCase = true) || t.contains("Recovery", ignoreCase = true)) {
+                restAndRecovery++
+            }
         }
 
-        val ratio = if (rest == 0) grind.toFloat() else grind.toFloat() / rest
-        Triple(grind, rest, ratio)
+        val ratio = if (restAndRecovery == 0) grind.toFloat() else grind.toFloat() / restAndRecovery
+        Triple(grind, restAndRecovery, ratio)
     }
 
     val burnDownForecast = remember(last14Days, allMeasurements, targetWeightStr, phasePreference) {
@@ -290,11 +304,13 @@ fun BehaviorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Behavioral Engine") },
+                title = {
+                    Text(text = "Behavioral Engine")
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             navController.popBackStack()
                         }
                     ) {
@@ -349,7 +365,7 @@ fun BehaviorScreen(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showBurnoutTooltip = !showBurnoutTooltip
                                 }
                         ) {
@@ -375,7 +391,7 @@ fun BehaviorScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Calculation: [Streak Days x 10] + [Deficit Intensity Penalty] + [Metabolic Volatility Penalty]. It predicts when the 'rubber-band effect' will trigger a binge based on cumulative biological stress.",
+                                text = "Calculation: [Streak Days x 5] + [Deficit Intensity Penalty] + [Metabolic Volatility Penalty]. Caps at 100%. 50%+ indicates moderate fatigue, 80%+ indicates critical cognitive depletion.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
@@ -515,7 +531,7 @@ fun BehaviorScreen(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showVixTooltip = !showVixTooltip
                                             }
                                     ) {
@@ -594,7 +610,7 @@ fun BehaviorScreen(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showRoiTooltip = !showRoiTooltip
                                             }
                                     ) {
@@ -699,7 +715,7 @@ fun BehaviorScreen(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showMomentumTooltip = !showMomentumTooltip
                                             }
                                     ) {
@@ -714,7 +730,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showMomentumTooltip) {
                                     Text(
-                                        text = "Calculation: Compares your 3-Day Trailing Avg vs 14-Day Trailing Avg. Identifies if your current trend is accelerating or decaying.",
+                                        text = "Calculation: Compares your 3-Day Weighted Moving Average (50% / 33% / 17%) vs 14-Day Trailing Avg. Identifies if your current trend is accelerating or decaying without overreacting to a single off-day.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -777,7 +793,7 @@ fun BehaviorScreen(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showParetoTooltip = !showParetoTooltip
                                             }
                                     ) {
@@ -885,7 +901,7 @@ fun BehaviorScreen(
                                     modifier = Modifier
                                         .size(20.dp)
                                         .clickable {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             showEgoTooltip = !showEgoTooltip
                                         }
                                 ) {
@@ -945,7 +961,7 @@ fun BehaviorScreen(
                 }
             }
 
-            // --- SECTION 5: PHYSIOLOGY & VELOCITY (V4.2) ---
+            // --- SECTION 5: PHYSIOLOGY & VELOCITY ---
             item {
                 Column(
                     modifier = elasticMod(4)
@@ -985,7 +1001,7 @@ fun BehaviorScreen(
                                 ) {
                                     val ratio = recoveryDebt.third
                                     val isDeloading = recoveryDebt.first == 0
-                                    val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 2.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
+                                    val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 3.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
 
                                     Icon(
                                         imageVector = Icons.Filled.Hotel,
@@ -999,7 +1015,7 @@ fun BehaviorScreen(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showRecoveryTooltip = !showRecoveryTooltip
                                             }
                                     ) {
@@ -1014,7 +1030,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showRecoveryTooltip) {
                                     Text(
-                                        text = "Calculation: Ratio of 'Grind' to 'Rest' tags over 14 days. Exceeding a 4.0 ratio indicates severe CNS fatigue and triggers a mandatory deload warning.",
+                                        text = "Calculation: Ratio of 'Grind' to ('Rest' + 'Recovery') tags over 14 days. < 3.0 = Sustainable, 3.0+ = High Strain, 4.0+ = Critical Debt (Deload required).",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -1033,8 +1049,8 @@ fun BehaviorScreen(
 
                                 val ratio = recoveryDebt.third
                                 val isDeloading = recoveryDebt.first == 0
-                                val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 2.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
-                                val statusText = if (isDeloading) "Deloading" else if (ratio >= 4.0) "Critical Debt" else if (ratio >= 2.0) "High Strain" else "Sustainable"
+                                val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 3.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
+                                val statusText = if (isDeloading) "Deloading" else if (ratio >= 4.0) "Critical Debt" else if (ratio >= 3.0) "High Strain" else "Sustainable"
 
                                 Text(
                                     text = statusText,
@@ -1084,7 +1100,7 @@ fun BehaviorScreen(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showVelocityTooltip = !showVelocityTooltip
                                             }
                                     ) {

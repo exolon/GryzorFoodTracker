@@ -187,23 +187,27 @@ fun LargeDayHeader(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // --- V4.5 FIX: Added weight(1f) and maxLines = 1 to prevent wrapping ---
                     Text(
                         text = date.format(DateTimeFormatter.ofPattern("EEEE")),
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.Bold
-                        )
+                        ),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     var expanded by remember { mutableStateOf(false) }
 
                     Box(
-                        modifier = Modifier.padding(end = 16.dp)
+                        modifier = Modifier.padding(start = 8.dp, end = 16.dp)
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (frictionScore >= 4) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 expanded = true
                             }
                         ) {
@@ -223,7 +227,8 @@ fun LargeDayHeader(
                                 Text(
                                     text = if (frictionScore > 0) "Load: $frictionScore/5" else "Set Load",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = if (frictionScore >= 4) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (frictionScore >= 4) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -238,7 +243,7 @@ fun LargeDayHeader(
                                         Text(text = "Level $level Friction")
                                     },
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         onFrictionChange(level)
                                         expanded = false
                                     }
@@ -254,7 +259,7 @@ fun LargeDayHeader(
                                         )
                                     },
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         onFrictionChange(0)
                                         expanded = false
                                     }
@@ -314,7 +319,7 @@ fun LargeDayHeader(
         navigationIcon = {
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onPrev()
                 }
             ) {
@@ -328,7 +333,7 @@ fun LargeDayHeader(
         actions = {
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onNext()
                 }
             ) {
@@ -340,7 +345,7 @@ fun LargeDayHeader(
             }
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onBehaviorClick()
                 }
             ) {
@@ -351,7 +356,7 @@ fun LargeDayHeader(
             }
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onAnalyticsClick()
                 }
             ) {
@@ -362,7 +367,7 @@ fun LargeDayHeader(
             }
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onCopy()
                 }
             ) {
@@ -373,7 +378,7 @@ fun LargeDayHeader(
             }
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onSettingsClick()
                 }
             ) {
@@ -413,7 +418,7 @@ fun MealCard(
                     true
                 }
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onDuplicate()
                     false
                 }
@@ -480,7 +485,7 @@ fun MealCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
                 .clickable {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onClick()
                 }
                 .graphicsLayer {
@@ -596,7 +601,7 @@ fun AddMealDialog(
     if (suggestionToBan != null) {
         AlertDialog(
             onDismissRequest = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 suggestionToBan = null
             },
             title = {
@@ -608,7 +613,7 @@ fun AddMealDialog(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onBanSuggestion(suggestionToBan!!)
                         suggestionToBan = null
                     }
@@ -622,7 +627,7 @@ fun AddMealDialog(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         suggestionToBan = null
                     }
                 ) {
@@ -634,7 +639,7 @@ fun AddMealDialog(
 
     AlertDialog(
         onDismissRequest = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onDismiss()
         },
         modifier = Modifier
@@ -664,7 +669,7 @@ fun AddMealDialog(
 
                 AssistChip(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showTimePicker = true
                     },
                     label = {
@@ -694,7 +699,7 @@ fun AddMealDialog(
                         FilterChip(
                             selected = selectedMealType == type,
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 selectedMealType = type
                             },
                             label = {
@@ -744,7 +749,7 @@ fun AddMealDialog(
                                     .clip(RoundedCornerShape(8.dp))
                                     .combinedClickable(
                                         onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             mealText = suggestion
                                         },
                                         onLongClick = {
@@ -774,7 +779,7 @@ fun AddMealDialog(
                 ) {
                     TextButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onDismiss()
                         }
                     ) {
@@ -788,7 +793,7 @@ fun AddMealDialog(
                     Button(
                         onClick = {
                             if (mealText.isNotBlank()) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onSave(mealTime, selectedMealType, mealText)
                             }
                         },
@@ -804,13 +809,13 @@ fun AddMealDialog(
     if (showTimePicker) {
         DatePickerDialog(
             onDismissRequest = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showTimePicker = false
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         mealTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
                         showTimePicker = false
                     }

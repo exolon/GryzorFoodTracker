@@ -12,9 +12,9 @@ android {
         applicationId = "com.example.gryzorfoodtracker"
         minSdk = 26
         targetSdk = 36
-        // --- V4.3 DEPLOYMENT BUMP ---
+        // --- V4.5 DEPLOYMENT BUMP ---
         versionCode = 26
-        versionName = "4.4"
+        versionName = "4.5"
         // ----------------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

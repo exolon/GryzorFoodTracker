@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -45,9 +46,13 @@ import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(navController: NavController, db: AppDatabase) {
+fun SettingsScreen(
+    navController: NavController,
+    db: AppDatabase
+) {
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current // V4.3: Haptic Engine
+    val haptic = LocalHapticFeedback.current
+    val uriHandler = LocalUriHandler.current
     val coroutineScope = rememberCoroutineScope()
     val dao = db.mealDao()
 
@@ -76,11 +81,16 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     LaunchedEffect(Unit) {
         entrance.animateTo(
             targetValue = 1f,
-            animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow)
+            animationSpec = spring(
+                dampingRatio = 0.85f,
+                stiffness = Spring.StiffnessVeryLow
+            )
         )
     }
 
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
@@ -106,7 +116,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
         }
     }
 
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
@@ -138,20 +150,27 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     if (requiresRestart) {
         AlertDialog(
             onDismissRequest = { },
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-            title = { Text("Import Successful") },
-            text = { Text("The database has been restored. The app must restart to apply the changes safely.") },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            ),
+            title = {
+                Text(text = "Import Successful")
+            },
+            text = {
+                Text(text = "The database has been restored. The app must restart to apply the changes safely.")
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         val intent = Intent(context, MainActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                         context.startActivity(intent)
                         Runtime.getRuntime().exit(0)
                     }
                 ) {
-                    Text("Restart App")
+                    Text(text = "Restart App")
                 }
             }
         )
@@ -160,12 +179,16 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     if (showManual) {
         AlertDialog(
             onDismissRequest = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = { Text("App Manual") },
+            title = {
+                Text(text = "App Manual")
+            },
             text = {
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     item {
                         Text(
                             text = "The Capture Engine",
@@ -177,7 +200,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
 
                         Text(
                             text = "The Context Layer",
@@ -185,11 +210,13 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Recovery).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).",
+                            text = "• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Recovery).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).\n• Morning Intent: Empty days now prompt you to set your load and tags before logging food.",
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
 
                         Text(
                             text = "Behavioral Engine",
@@ -206,10 +233,12 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showManual = false
                     }
-                ) { Text("Close") }
+                ) {
+                    Text(text = "Close")
+                }
             }
         )
     }
@@ -217,20 +246,24 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     if (showChangelog) {
         AlertDialog(
             onDismissRequest = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showChangelog = false
             },
-            title = { Text("Version History") },
+            title = {
+                Text(text = "Version History")
+            },
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery' to better support the Recovery Debt ratio.",
+                        "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math (WMA Momentum, softened Burnout scale, fixed Recovery denominator). Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard into the empty day state.",
+                        "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery'. Built Self-Healing data matrix for orphaned tags.",
                         "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio, and Long-Press Suggestion Banishment.",
-                        "v4.1" to "The UX Polish Pass: Added explicit Help Tooltips to all charts and behavioral metrics. Isolated 'Cognitive Load' into a dedicated Dropdown Header Picker.",
                         "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
                     )
                     items(logs) { (version, notes) ->
-                        Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                        Column(
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        ) {
                             Text(
                                 text = version,
                                 fontWeight = FontWeight.Bold,
@@ -247,10 +280,12 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showChangelog = false
                     }
-                ) { Text("Close") }
+                ) {
+                    Text(text = "Close")
+                }
             }
         )
     }
@@ -258,15 +293,20 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Options") },
+                title = {
+                    Text(text = "Options")
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             navController.popBackStack()
                         }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -284,11 +324,17 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                 .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item {
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+            }
 
             // --- APPEARANCE SECTION ---
             item {
-                Column(modifier = elasticMod(0)) {
+                Column(
+                    modifier = elasticMod(0)
+                ) {
                     Row(
                         modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 0.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -299,7 +345,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
                         Text(
                             text = "Appearance",
                             style = MaterialTheme.typography.titleMedium,
@@ -320,7 +368,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     coroutineScope.launch {
                                         context.dataStore.edit { it[THEME_MODE_KEY] = key }
                                     }
@@ -328,14 +376,21 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                                 .padding(horizontal = 24.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(selected = themePreference == key, onClick = null)
-                            Spacer(Modifier.width(16.dp))
+                            RadioButton(
+                                selected = themePreference == key,
+                                onClick = null
+                            )
+                            Spacer(
+                                modifier = Modifier.width(16.dp)
+                            )
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(Modifier.width(16.dp))
+                            Spacer(
+                                modifier = Modifier.width(16.dp)
+                            )
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.bodyLarge
@@ -347,7 +402,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
 
             // --- GOALS & PHASE SECTION ---
             item {
-                Column(modifier = elasticMod(1)) {
+                Column(
+                    modifier = elasticMod(1)
+                ) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -362,7 +419,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
                         Text(
                             text = "Physical Goals",
                             style = MaterialTheme.typography.titleMedium,
@@ -377,19 +436,23 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                                 context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal }
                             }
                         },
-                        label = { Text("Target Body Weight (kg)") },
+                        label = {
+                            Text(text = "Target Body Weight (kg)")
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        )
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
                                     context.dataStore.edit { it[PHASE_MODE_KEY] = "cut" }
                                 }
@@ -397,8 +460,13 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = phasePreference == "cut", onClick = null)
-                        Spacer(Modifier.width(16.dp))
+                        RadioButton(
+                            selected = phasePreference == "cut",
+                            onClick = null
+                        )
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
                         Column {
                             Text(
                                 text = "Cut Mode",
@@ -417,7 +485,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
                                     context.dataStore.edit { it[PHASE_MODE_KEY] = "bulk" }
                                 }
@@ -425,8 +493,13 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = phasePreference == "bulk", onClick = null)
-                        Spacer(Modifier.width(16.dp))
+                        RadioButton(
+                            selected = phasePreference == "bulk",
+                            onClick = null
+                        )
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
                         Column {
                             Text(
                                 text = "Bulk Mode",
@@ -445,7 +518,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
 
             // --- CONTEXT TAGS SECTION ---
             item {
-                Column(modifier = elasticMod(2)) {
+                Column(
+                    modifier = elasticMod(2)
+                ) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -460,7 +535,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
                         Text(
                             text = "Context Tags",
                             style = MaterialTheme.typography.titleMedium,
@@ -475,16 +552,22 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     ) {
                         OutlinedTextField(
                             value = newTagText,
-                            onValueChange = { newTagText = it },
+                            onValueChange = {
+                                newTagText = it
+                            },
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("e.g. High Carb Day") },
+                            placeholder = {
+                                Text(text = "e.g. High Carb Day")
+                            },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp)
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
                         Button(
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 if (newTagText.isNotBlank()) {
                                     coroutineScope.launch {
                                         context.dataStore.edit { prefs ->
@@ -498,9 +581,13 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.height(56.dp)
-                        ) { Text("Add") }
+                        ) {
+                            Text(text = "Add")
+                        }
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(
+                        modifier = Modifier.height(16.dp)
+                    )
                 }
             }
 
@@ -509,15 +596,21 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     modifier = elasticMod(2)
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 6.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(tag, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = tag,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             coroutineScope.launch {
                                 context.dataStore.edit { prefs ->
                                     val updatedSet = HashSet(prefs[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS)
@@ -538,7 +631,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
 
             // --- DATA MANAGEMENT SECTION ---
             item {
-                Column(modifier = elasticMod(3)) {
+                Column(
+                    modifier = elasticMod(3)
+                ) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -553,7 +648,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
                         Text(
                             text = "Data Management",
                             style = MaterialTheme.typography.titleMedium,
@@ -564,7 +661,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 exportLauncher.launch("food_tracker_db_${LocalDate.now()}.db")
                             }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
@@ -575,7 +672,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
                         Text(
                             text = "Export Database",
                             style = MaterialTheme.typography.bodyLarge
@@ -585,7 +684,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 importLauncher.launch(arrayOf("*/*"))
                             }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
@@ -596,7 +695,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
                         Text(
                             text = "Import Database",
                             style = MaterialTheme.typography.bodyLarge
@@ -607,7 +708,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
 
             // --- ABOUT SECTION ---
             item {
-                Column(modifier = elasticMod(4)) {
+                Column(
+                    modifier = elasticMod(4)
+                ) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -616,7 +719,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 showManual = true
                             }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
@@ -627,7 +730,9 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
                         Text(
                             text = "App Manual",
                             style = MaterialTheme.typography.bodyLarge
@@ -637,7 +742,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 showChangelog = true
                             }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
@@ -648,9 +753,35 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
                         Text(
                             text = "View Changelog",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    // --- V4.5 GITHUB REPO LINK ---
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                uriHandler.openUri("https://github.com/exolon/GryzorFoodTracker")
+                            }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Code,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
+                        Text(
+                            text = "GitHub Repository",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
@@ -671,7 +802,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.3",
+                        text = "v4.5",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape // <-- FIXED IMPORT
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,6 +53,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.edit
 import androidx.glance.appwidget.updateAll
@@ -331,7 +333,7 @@ fun FoodTrackerScreen(
                 Column(horizontalAlignment = Alignment.End) {
                     SmallFloatingActionButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                         },
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -349,7 +351,7 @@ fun FoodTrackerScreen(
 
                     FloatingActionButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             editingMeal = null
                             duplicatingMeal = null
                             initialDialogMealType = "Lunch"
@@ -429,7 +431,7 @@ fun FoodTrackerScreen(
                             )
                         }
                 ) {
-                    if (availableTags.isNotEmpty()) {
+                    if (availableTags.isNotEmpty() && pageEntries.isNotEmpty()) {
                         FlowRow(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -442,7 +444,7 @@ fun FoodTrackerScreen(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         coroutineScope.launch(Dispatchers.IO) {
                                             val currentFrictionTag = activeTagsList.find { it.startsWith("Friction:") }
                                             val cleaned = activeTagsList.filter { !it.startsWith("Friction:") }
@@ -473,30 +475,156 @@ fun FoodTrackerScreen(
                             .fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(280.dp)
-                                .alpha(if (pageEntries.isEmpty()) 0.25f else 0.15f)
-                        )
 
                         if (pageEntries.isEmpty()) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp)
+                                    .offset(y = (-32).dp),
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
                             ) {
-                                Text(
-                                    text = "The day is clear.",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                                )
-                                Text(
-                                    text = "Tap + or Mic to log your first meal.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.WbSunny,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.height(16.dp)
+                                    )
+
+                                    Text(
+                                        text = "Morning Intent",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    Text(
+                                        text = "Establish your baseline for today.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.height(32.dp)
+                                    )
+
+                                    Text(
+                                        text = "Cognitive Load",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.align(Alignment.Start)
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.height(8.dp)
+                                    )
+
+                                    val currentFriction = activeTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        (1..5).forEach { level ->
+                                            FilterChip(
+                                                selected = currentFriction == level,
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    coroutineScope.launch(Dispatchers.IO) {
+                                                        val cleaned = activeTagsList.filter { !it.startsWith("Friction:") }
+                                                        val newTags = if (currentFriction == level) cleaned else cleaned + "Friction: $level"
+                                                        dao.insertTags(
+                                                            DailyTagEntity(
+                                                                date = pageDate,
+                                                                tags = newTags.joinToString(",")
+                                                            )
+                                                        )
+                                                        MacroWidget().updateAll(context)
+                                                    }
+                                                },
+                                                label = {
+                                                    Text(text = level.toString())
+                                                },
+                                                shape = CircleShape
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(
+                                        modifier = Modifier.height(24.dp)
+                                    )
+
+                                    Text(
+                                        text = "Context Tags",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.align(Alignment.Start)
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.height(8.dp)
+                                    )
+
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        availableTags.filter { it.isNotBlank() }.sorted().forEach { tag ->
+                                            val isSelected = visualTags.contains(tag)
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    coroutineScope.launch(Dispatchers.IO) {
+                                                        val currentFrictionTag = activeTagsList.find { it.startsWith("Friction:") }
+                                                        val cleaned = activeTagsList.filter { !it.startsWith("Friction:") }
+                                                        val newVisuals = if (isSelected) cleaned.filter { it != tag } else cleaned + tag
+                                                        val newTags = if (currentFrictionTag != null) newVisuals + currentFrictionTag else newVisuals
+
+                                                        dao.insertTags(
+                                                            DailyTagEntity(
+                                                                date = pageDate,
+                                                                tags = newTags.joinToString(",")
+                                                            )
+                                                        )
+                                                        MacroWidget().updateAll(context)
+                                                    }
+                                                },
+                                                label = {
+                                                    Text(text = tag)
+                                                },
+                                                shape = RoundedCornerShape(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         } else {
+                            Image(
+                                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(280.dp)
+                                    .alpha(0.15f)
+                            )
+
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -610,7 +738,7 @@ fun FoodTrackerScreen(
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.clickable {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                         showFastTooltip = !showFastTooltip
                                                     }
                                                 ) {
@@ -822,7 +950,7 @@ fun FoodTrackerScreen(
                                                 ) {
                                                     TextButton(
                                                         onClick = {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                             focusManager.clearFocus()
                                                         },
                                                         contentPadding = PaddingValues(

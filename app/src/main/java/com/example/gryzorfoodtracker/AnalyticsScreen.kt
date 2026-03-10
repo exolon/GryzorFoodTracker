@@ -178,7 +178,6 @@ fun AnalyticsScreen(
             coroutineScope.launch(Dispatchers.IO) {
                 try {
                     context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        // FIXED: Removed explicit parameter names to perfectly match your PDF Generator signature
                         generateExecutiveSummaryPdf(
                             outputStream,
                             phasePreference,
@@ -270,7 +269,7 @@ fun AnalyticsScreen(
                 navigationIcon = {
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             navController.popBackStack()
                         }
                     ) {
@@ -283,7 +282,7 @@ fun AnalyticsScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             exportPdfLauncher.launch("Gryzor_Summary_${LocalDate.now()}.pdf")
                         }
                     ) {
@@ -336,7 +335,7 @@ fun AnalyticsScreen(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showTopCardsTooltip = !showTopCardsTooltip
                                 }
                         ) {
@@ -493,7 +492,7 @@ fun AnalyticsScreen(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showHeatmapTooltip = !showHeatmapTooltip
                                 }
                         ) {
@@ -517,8 +516,9 @@ fun AnalyticsScreen(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
+                            // --- V4.5 THEME AGNOSTIC TEXT FIX ---
                             Text(
-                                text = "A visual representation of adherence over a rolling 30-day window. Blue indicates a successful day based on your current phase (Cut/Bulk), Red indicates failure, and Gray indicates no data.",
+                                text = "A visual representation of adherence over a rolling 30-day window. The Primary Theme Color indicates a successful day based on your phase (Cut/Bulk). The Error Color indicates failure, and the subdued Surface Color indicates no data.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -565,7 +565,7 @@ fun AnalyticsScreen(
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(boxColor)
                                         .clickable {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             navController.previousBackStackEntry?.savedStateHandle?.set("targetDate", date)
                                             navController.popBackStack()
                                         }
@@ -585,6 +585,18 @@ fun AnalyticsScreen(
                     fontSize = 9.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
+                // --- V4.5 AXIS LABEL STYLE ---
+                val axisStyleKcal = TextStyle(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = primaryColor.copy(alpha = 0.8f)
+                )
+                val axisStyleDef = TextStyle(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = errorColor.copy(alpha = 0.8f)
+                )
+
                 val tooltipStyle = TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -613,7 +625,7 @@ fun AnalyticsScreen(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showMacroTooltip = !showMacroTooltip
                                 }
                         ) {
@@ -692,7 +704,7 @@ fun AnalyticsScreen(
                                             val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
                                             if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
                                                 tappedMacro = closest
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             } else {
                                                 tappedMacro = null
                                             }
@@ -730,6 +742,22 @@ fun AnalyticsScreen(
                                     end = Offset(size.width, zeroY),
                                     strokeWidth = 2f
                                 )
+
+                                // --- V4.5 AXIS LABELS RENDERING ---
+                                if (animProgress.value > 0.8f) {
+                                    val maxKcalLabel = textMeasurer.measure("${maxKcal.toInt()}", axisStyleKcal)
+                                    drawText(
+                                        textLayoutResult = maxKcalLabel,
+                                        topLeft = Offset(0f, 0f)
+                                    )
+
+                                    val minDefLabel = textMeasurer.measure("${minDeficit.toInt()}", axisStyleDef)
+                                    drawText(
+                                        textLayoutResult = minDefLabel,
+                                        topLeft = Offset(size.width - minDefLabel.size.width, graphHeight - minDefLabel.size.height)
+                                    )
+                                }
+                                // ----------------------------------
 
                                 val kcalPath = Path()
                                 val deficitPath = Path()
@@ -841,6 +869,18 @@ fun AnalyticsScreen(
                     fontSize = 9.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
+                // --- V4.5 AXIS LABEL STYLE ---
+                val axisStyleW = TextStyle(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = primaryColor.copy(alpha = 0.8f)
+                )
+                val axisStyleF = TextStyle(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = secColor.copy(alpha = 0.8f)
+                )
+
                 val tooltipStyle = TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -869,7 +909,7 @@ fun AnalyticsScreen(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showCompTooltip = !showCompTooltip
                                 }
                         ) {
@@ -949,7 +989,7 @@ fun AnalyticsScreen(
                                             val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
                                             if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
                                                 tappedComp = closest
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             } else {
                                                 tappedComp = null
                                             }
@@ -966,6 +1006,34 @@ fun AnalyticsScreen(
                                 val maxFat = 25f
                                 val minFat = 10f
                                 val rangeF = maxFat - minFat
+
+                                // --- V4.5 AXIS LABELS RENDERING ---
+                                if (animProgress.value > 0.8f) {
+                                    val maxWLabel = textMeasurer.measure("${maxWeight.toInt()}kg", axisStyleW)
+                                    drawText(
+                                        textLayoutResult = maxWLabel,
+                                        topLeft = Offset(0f, 0f)
+                                    )
+
+                                    val minWLabel = textMeasurer.measure("${minWeight.toInt()}kg", axisStyleW)
+                                    drawText(
+                                        textLayoutResult = minWLabel,
+                                        topLeft = Offset(0f, graphHeight - minWLabel.size.height)
+                                    )
+
+                                    val maxFLabel = textMeasurer.measure("${maxFat.toInt()}%", axisStyleF)
+                                    drawText(
+                                        textLayoutResult = maxFLabel,
+                                        topLeft = Offset(size.width - maxFLabel.size.width, 0f)
+                                    )
+
+                                    val minFLabel = textMeasurer.measure("${minFat.toInt()}%", axisStyleF)
+                                    drawText(
+                                        textLayoutResult = minFLabel,
+                                        topLeft = Offset(size.width - minFLabel.size.width, graphHeight - minFLabel.size.height)
+                                    )
+                                }
+                                // ----------------------------------
 
                                 val wPath = Path()
                                 val fPath = Path()
@@ -1101,7 +1169,7 @@ fun AnalyticsScreen(
                                 modifier = Modifier
                                     .size(20.dp)
                                     .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         showTooltip = !showTooltip
                                     }
                             ) {
