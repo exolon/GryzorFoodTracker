@@ -167,6 +167,8 @@ fun LargeDayHeader(
     dailyFat: String?,
     frictionScore: Int,
     onFrictionChange: (Int) -> Unit,
+    sleepScore: Int, // V4.6: SLEEP SCORE PARAMETER
+    onSleepChange: (Int) -> Unit, // V4.6: SLEEP CHANGE EVENT
     scrollBehavior: TopAppBarScrollBehavior,
     onBehaviorClick: () -> Unit,
     onAnalyticsClick: () -> Unit,
@@ -187,7 +189,6 @@ fun LargeDayHeader(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // --- V4.5 FIX: Added weight(1f) and maxLines = 1 to prevent wrapping ---
                     Text(
                         text = date.format(DateTimeFormatter.ofPattern("EEEE")),
                         style = MaterialTheme.typography.headlineMedium.copy(
@@ -198,72 +199,144 @@ fun LargeDayHeader(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    var expanded by remember { mutableStateOf(false) }
-
-                    Box(
-                        modifier = Modifier.padding(start = 8.dp, end = 16.dp)
+                    Row(
+                        modifier = Modifier.padding(start = 8.dp, end = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (frictionScore >= 4) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                expanded = true
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        // --- COGNITIVE LOAD PILL ---
+                        var loadExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (frictionScore >= 4) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    loadExpanded = true
+                                }
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Psychology,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (frictionScore >= 4) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(
-                                    modifier = Modifier.width(4.dp)
-                                )
-                                Text(
-                                    text = if (frictionScore > 0) "Load: $frictionScore/5" else "Set Load",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (frictionScore >= 4) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Psychology,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (frictionScore >= 4) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(
+                                        modifier = Modifier.width(4.dp)
+                                    )
+                                    Text(
+                                        text = if (frictionScore > 0) "$frictionScore/5" else "Load",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (frictionScore >= 4) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = loadExpanded,
+                                onDismissRequest = { loadExpanded = false }
+                            ) {
+                                (1..5).forEach { level ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(text = "Level $level Load")
+                                        },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onFrictionChange(level)
+                                            loadExpanded = false
+                                        }
+                                    )
+                                }
+                                if (frictionScore > 0) {
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "Clear",
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onFrictionChange(0)
+                                            loadExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
 
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            (1..5).forEach { level ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(text = "Level $level Friction")
-                                    },
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onFrictionChange(level)
-                                        expanded = false
-                                    }
-                                )
+                        // --- V4.6: SLEEP QUALITY PILL ---
+                        var sleepExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (sleepScore in 1..2) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    sleepExpanded = true
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Bed,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (sleepScore in 1..2) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                                    )
+                                    Spacer(
+                                        modifier = Modifier.width(4.dp)
+                                    )
+                                    Text(
+                                        text = if (sleepScore > 0) "$sleepScore/5" else "Sleep",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (sleepScore in 1..2) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
                             }
-                            if (frictionScore > 0) {
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "Clear",
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    },
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onFrictionChange(0)
-                                        expanded = false
-                                    }
-                                )
+
+                            DropdownMenu(
+                                expanded = sleepExpanded,
+                                onDismissRequest = { sleepExpanded = false }
+                            ) {
+                                (1..5).forEach { level ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(text = "Level $level Sleep")
+                                        },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onSleepChange(level)
+                                            sleepExpanded = false
+                                        }
+                                    )
+                                }
+                                if (sleepScore > 0) {
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "Clear",
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onSleepChange(0)
+                                            sleepExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

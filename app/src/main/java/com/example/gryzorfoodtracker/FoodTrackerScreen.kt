@@ -22,7 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape // <-- FIXED IMPORT
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -253,7 +253,9 @@ fun FoodTrackerScreen(
 
     val headerTagsStr = currentDayTags?.tags ?: ""
     val headerTagsList = headerTagsStr.split(",").map { it.trim() }.filter { it.isNotBlank() }
+
     val headerFriction = headerTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+    val headerSleep = headerTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
     Box(
         modifier = Modifier
@@ -287,6 +289,20 @@ fun FoodTrackerScreen(
                         coroutineScope.launch(Dispatchers.IO) {
                             val cleaned = headerTagsList.filter { !it.startsWith("Friction:") }
                             val newTags = if (newF > 0) cleaned + "Friction: $newF" else cleaned
+                            dao.insertTags(
+                                DailyTagEntity(
+                                    date = currentDate.toString(),
+                                    tags = newTags.joinToString(",")
+                                )
+                            )
+                            MacroWidget().updateAll(context)
+                        }
+                    },
+                    sleepScore = headerSleep,
+                    onSleepChange = { newS ->
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val cleaned = headerTagsList.filter { !it.startsWith("Sleep:") }
+                            val newTags = if (newS > 0) cleaned + "Sleep: $newS" else cleaned
                             dao.insertTags(
                                 DailyTagEntity(
                                     date = currentDate.toString(),
@@ -418,7 +434,7 @@ fun FoodTrackerScreen(
                 }
 
                 val activeTagsList = pageTags?.tags?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                val visualTags = activeTagsList.filter { !it.startsWith("Friction:") }
+                val visualTags = activeTagsList.filter { !it.startsWith("Friction:") && !it.startsWith("Sleep:") }
 
                 Column(
                     modifier = Modifier
@@ -447,14 +463,21 @@ fun FoodTrackerScreen(
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         coroutineScope.launch(Dispatchers.IO) {
                                             val currentFrictionTag = activeTagsList.find { it.startsWith("Friction:") }
-                                            val cleaned = activeTagsList.filter { !it.startsWith("Friction:") }
+                                            val currentSleepTag = activeTagsList.find { it.startsWith("Sleep:") }
+
+                                            val cleaned = activeTagsList.filter { !it.startsWith("Friction:") && !it.startsWith("Sleep:") }
                                             val newVisuals = if (isSelected) cleaned.filter { it != tag } else cleaned + tag
-                                            val newTags = if (currentFrictionTag != null) newVisuals + currentFrictionTag else newVisuals
+
+                                            val buildTags = mutableListOf<String>().apply {
+                                                addAll(newVisuals)
+                                                currentFrictionTag?.let { add(it) }
+                                                currentSleepTag?.let { add(it) }
+                                            }
 
                                             dao.insertTags(
                                                 DailyTagEntity(
                                                     date = pageDate,
-                                                    tags = newTags.joinToString(",")
+                                                    tags = buildTags.joinToString(",")
                                                 )
                                             )
                                             MacroWidget().updateAll(context)
@@ -524,6 +547,7 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.height(32.dp)
                                     )
 
+                                    // --- COGNITIVE LOAD ROW ---
                                     Text(
                                         text = "Cognitive Load",
                                         style = MaterialTheme.typography.labelLarge,
@@ -570,6 +594,54 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.height(24.dp)
                                     )
 
+                                    // --- V4.6 SLEEP SCORE ROW ---
+                                    Text(
+                                        text = "Sleep Quality",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.align(Alignment.Start)
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.height(8.dp)
+                                    )
+
+                                    val currentSleep = activeTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        (1..5).forEach { level ->
+                                            FilterChip(
+                                                selected = currentSleep == level,
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    coroutineScope.launch(Dispatchers.IO) {
+                                                        val cleaned = activeTagsList.filter { !it.startsWith("Sleep:") }
+                                                        val newTags = if (currentSleep == level) cleaned else cleaned + "Sleep: $level"
+                                                        dao.insertTags(
+                                                            DailyTagEntity(
+                                                                date = pageDate,
+                                                                tags = newTags.joinToString(",")
+                                                            )
+                                                        )
+                                                        MacroWidget().updateAll(context)
+                                                    }
+                                                },
+                                                label = {
+                                                    Text(text = level.toString())
+                                                },
+                                                shape = CircleShape
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(
+                                        modifier = Modifier.height(24.dp)
+                                    )
+
+                                    // --- CONTEXT TAGS ROW ---
                                     Text(
                                         text = "Context Tags",
                                         style = MaterialTheme.typography.labelLarge,
@@ -594,14 +666,21 @@ fun FoodTrackerScreen(
                                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                     coroutineScope.launch(Dispatchers.IO) {
                                                         val currentFrictionTag = activeTagsList.find { it.startsWith("Friction:") }
-                                                        val cleaned = activeTagsList.filter { !it.startsWith("Friction:") }
+                                                        val currentSleepTag = activeTagsList.find { it.startsWith("Sleep:") }
+
+                                                        val cleaned = activeTagsList.filter { !it.startsWith("Friction:") && !it.startsWith("Sleep:") }
                                                         val newVisuals = if (isSelected) cleaned.filter { it != tag } else cleaned + tag
-                                                        val newTags = if (currentFrictionTag != null) newVisuals + currentFrictionTag else newVisuals
+
+                                                        val buildTags = mutableListOf<String>().apply {
+                                                            addAll(newVisuals)
+                                                            currentFrictionTag?.let { add(it) }
+                                                            currentSleepTag?.let { add(it) }
+                                                        }
 
                                                         dao.insertTags(
                                                             DailyTagEntity(
                                                                 date = pageDate,
-                                                                tags = newTags.joinToString(",")
+                                                                tags = buildTags.joinToString(",")
                                                             )
                                                         )
                                                         MacroWidget().updateAll(context)

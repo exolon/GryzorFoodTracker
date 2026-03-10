@@ -143,6 +143,7 @@ fun AnalyticsScreen(
                 .filter { tagString ->
                     tagString.isNotBlank() &&
                             !tagString.startsWith("Friction:", ignoreCase = true) &&
+                            !tagString.startsWith("Sleep:", ignoreCase = true) && // V4.6 FIX: Filter out Sleep
                             customTags.contains(tagString)
                 }
 

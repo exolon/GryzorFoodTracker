@@ -113,8 +113,8 @@ fun BehaviorScreen(
         }
     }
 
-    // --- V4.5 REFINED BURNOUT MATH ---
-    val burnoutRisk = remember(daysReversed, allMetrics, vixScore, phasePreference) {
+    // --- V4.6 SLEEP PENALTY FOR BURNOUT ---
+    val burnoutRisk = remember(daysReversed, allMetrics, allTags, vixScore, phasePreference) {
         if (phasePreference == "bulk") {
             0
         } else {
@@ -133,16 +133,29 @@ fun BehaviorScreen(
             }
 
             val avgStreakDef = if (streak > 0) recentDeficitSum / streak else 0.0
-            var risk = streak * 5 // Reduced from 10 to soften the curve
+            var risk = streak * 5
 
             if (avgStreakDef > 600) risk += 15
             if (vixScore > 300) risk += 15
+
+            // Check most recently logged sleep score
+            var recentSleep = 0
+            for (date in daysReversed) {
+                val tags = allTags.find { it.date == date }?.tags ?: ""
+                val sleep = tags.split(",").find { it.trim().startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                if (sleep > 0) {
+                    recentSleep = sleep
+                    break
+                }
+            }
+            if (recentSleep in 1..2) {
+                risk += 15
+            }
 
             risk.coerceIn(0, 100)
         }
     }
 
-    // --- V4.5 WEIGHTED MOVING AVERAGE MOMENTUM ---
     val momentumData = remember(daysReversed, allMetrics) {
         val recent3 = daysReversed.take(3).map { date ->
             allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
@@ -194,44 +207,52 @@ fun BehaviorScreen(
         }
     }
 
-    val frictionData = remember(last14Days, allMetrics, allTags, phasePreference) {
-        var highFrictionDays = 0
-        var highFrictionWins = 0
+    // --- V4.6 WILLPOWER TAX (REPLACES FRICTION EGO DEPLETION) ---
+    val willpowerTax = remember(last14Days, allMetrics, allTags, phasePreference) {
+        var poorSleepDays = 0
+        var poorSleepWins = 0
+        var goodSleepDays = 0
+        var goodSleepWins = 0
 
         last14Days.forEach { date ->
             val tags = allTags.find { it.date == date }?.tags ?: ""
-            if (tags.contains("Friction:", ignoreCase = true)) {
-                val level = tags.split(",")
-                    .find { it.trim().startsWith("Friction:") }
-                    ?.substringAfter(":")
-                    ?.trim()
-                    ?.toIntOrNull() ?: 0
+            val sleep = tags.split(",").find { it.trim().startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
-                if (level >= 4) {
-                    highFrictionDays++
-                    val def = allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
-                    val isWin = if (phasePreference == "bulk") def < 0 else def > 0
-                    if (isWin) highFrictionWins++
+            if (sleep > 0) {
+                val def = allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
+                val isWin = if (phasePreference == "bulk") def < 0 else def > 0
+
+                if (sleep in 1..2) {
+                    poorSleepDays++
+                    if (isWin) poorSleepWins++
+                } else if (sleep in 4..5) {
+                    goodSleepDays++
+                    if (isWin) goodSleepWins++
                 }
             }
         }
 
-        if (highFrictionDays == 0) {
-            -1
-        } else {
-            ((highFrictionWins.toFloat() / highFrictionDays) * 100).toInt()
-        }
+        val poorRate = if (poorSleepDays == 0) -1 else ((poorSleepWins.toFloat() / poorSleepDays) * 100).toInt()
+        val goodRate = if (goodSleepDays == 0) -1 else ((goodSleepWins.toFloat() / goodSleepDays) * 100).toInt()
+
+        Pair(goodRate, poorRate)
     }
 
-    // --- V4.5 RECOVERY DEBT MATH FIX ---
+    // --- V4.6 RECOVERY DEBT SLEEP MULTIPLIER ---
     val recoveryDebt = remember(last14Days, allTags) {
-        var grind = 0
+        var grind = 0.0
         var restAndRecovery = 0
 
         last14Days.forEach { d ->
             val t = allTags.find { it.date == d }?.tags ?: ""
-            if (t.contains("Grind", ignoreCase = true)) {
-                grind++
+            val sleep = t.split(",").find { it.trim().startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+
+            if (t.contains("Grind", ignoreCase = true) || t.contains("Upper Body Bias", ignoreCase = true)) {
+                if (sleep in 1..2) {
+                    grind += 1.5
+                } else {
+                    grind += 1.0
+                }
             }
             if (t.contains("Rest", ignoreCase = true) || t.contains("Recovery", ignoreCase = true)) {
                 restAndRecovery++
@@ -297,7 +318,7 @@ fun BehaviorScreen(
     var showRoiTooltip by remember { mutableStateOf(false) }
     var showMomentumTooltip by remember { mutableStateOf(false) }
     var showParetoTooltip by remember { mutableStateOf(false) }
-    var showEgoTooltip by remember { mutableStateOf(false) }
+    var showWillpowerTooltip by remember { mutableStateOf(false) }
     var showRecoveryTooltip by remember { mutableStateOf(false) }
     var showVelocityTooltip by remember { mutableStateOf(false) }
 
@@ -391,7 +412,7 @@ fun BehaviorScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Calculation: [Streak Days x 5] + [Deficit Intensity Penalty] + [Metabolic Volatility Penalty]. Caps at 100%. 50%+ indicates moderate fatigue, 80%+ indicates critical cognitive depletion.",
+                                text = "Calculation: [Streak Days x 5] + [Deficit Intensity] + [Metabolic Volatility] + [Sleep Penalty]. Caps at 100%. 50%+ indicates moderate fatigue, 80%+ indicates critical cognitive depletion.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
@@ -844,7 +865,7 @@ fun BehaviorScreen(
                 }
             }
 
-            // --- SECTION 4: COGNITIVE LOAD ---
+            // --- SECTION 4: THE WILLPOWER TAX (V4.6) ---
             item {
                 Column(
                     modifier = elasticMod(3)
@@ -852,7 +873,7 @@ fun BehaviorScreen(
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
                 ) {
                     Text(
-                        text = "Cognitive Load",
+                        text = "The Willpower Tax",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -878,21 +899,22 @@ fun BehaviorScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    val egoColor = if (frictionData == -1) MaterialTheme.colorScheme.outline else if (frictionData >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    val hasData = willpowerTax.first != -1 || willpowerTax.second != -1
+                                    val iconColor = if (hasData) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                     Icon(
                                         imageVector = Icons.Filled.Psychology,
                                         contentDescription = null,
-                                        tint = egoColor,
+                                        tint = iconColor,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(
                                         modifier = Modifier.width(12.dp)
                                     )
                                     Text(
-                                        text = "Ego Depletion Matrix",
+                                        text = "Sleep vs Adherence",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = egoColor
+                                        color = iconColor
                                     )
                                 }
                                 Surface(
@@ -902,7 +924,7 @@ fun BehaviorScreen(
                                         .size(20.dp)
                                         .clickable {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            showEgoTooltip = !showEgoTooltip
+                                            showWillpowerTooltip = !showWillpowerTooltip
                                         }
                                 ) {
                                     Icon(
@@ -914,14 +936,14 @@ fun BehaviorScreen(
                                 }
                             }
 
-                            AnimatedVisibility(visible = showEgoTooltip) {
+                            AnimatedVisibility(visible = showWillpowerTooltip) {
                                 Surface(
                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.padding(start = 0.dp, top = 12.dp, end = 0.dp, bottom = 0.dp)
                                 ) {
                                     Text(
-                                        text = "Calculation: Measures your success rate specifically on days tagged 'Load 4' or 'Load 5'. Proves statistically if your adherence drops when your cognitive bandwidth is compromised by work/life demands.",
+                                        text = "Calculation: Compares your deficit success rate on days logged with Good Sleep (Scores 4-5) versus Poor Sleep (Scores 1-2). Proves mathematically how compromised sleep degrades your cognitive discipline.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
@@ -933,28 +955,50 @@ fun BehaviorScreen(
                                 modifier = Modifier.height(16.dp)
                             )
 
-                            if (frictionData == -1) {
+                            if (willpowerTax.first == -1 && willpowerTax.second == -1) {
                                 Text(
-                                    text = "Matrix Inactive. Use the 'Load' picker next to the Date on the Home screen to tag high-stress days.",
+                                    text = "Matrix Inactive. Log your Sleep Quality in the Morning Intent dashboard to generate this correlation.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             } else {
-                                val egoColor = if (frictionData >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                Text(
-                                    text = "$frictionData% Adherence under High Friction",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = egoColor
-                                )
-                                Spacer(
-                                    modifier = Modifier.height(8.dp)
-                                )
-                                Text(
-                                    text = if (frictionData >= 70) "Strong cognitive resilience. You are executing the plan despite systemic stress." else "Ego Depletion confirmed. High friction consistently breaks your adherence. Pre-plan Maintenance calories on high-stress days to prevent failure.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Good Sleep",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                        val goodText = if (willpowerTax.first == -1) "--" else "${willpowerTax.first}%"
+                                        Text(
+                                            text = goodText,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(16.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Poor Sleep",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                        val poorText = if (willpowerTax.second == -1) "--" else "${willpowerTax.second}%"
+                                        val poorColor = if (willpowerTax.second != -1 && willpowerTax.second < 50) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                                        Text(
+                                            text = poorText,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = poorColor
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1000,7 +1044,7 @@ fun BehaviorScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val ratio = recoveryDebt.third
-                                    val isDeloading = recoveryDebt.first == 0
+                                    val isDeloading = recoveryDebt.first == 0.0
                                     val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 3.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
 
                                     Icon(
@@ -1030,7 +1074,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showRecoveryTooltip) {
                                     Text(
-                                        text = "Calculation: Ratio of 'Grind' to ('Rest' + 'Recovery') tags over 14 days. < 3.0 = Sustainable, 3.0+ = High Strain, 4.0+ = Critical Debt (Deload required).",
+                                        text = "Calculation: Ratio of 'Grind' to ('Rest' + 'Recovery') tags over 14 days. Grind days logged on Poor Sleep (1-2) are taxed at 1.5x. < 3.0 = Sustainable, 3.0+ = High Strain, 4.0+ = Critical Debt.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -1048,7 +1092,7 @@ fun BehaviorScreen(
                                 )
 
                                 val ratio = recoveryDebt.third
-                                val isDeloading = recoveryDebt.first == 0
+                                val isDeloading = recoveryDebt.first == 0.0
                                 val debtColor = if (isDeloading) MaterialTheme.colorScheme.primary else if (ratio >= 4.0) MaterialTheme.colorScheme.error else if (ratio >= 3.0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
                                 val statusText = if (isDeloading) "Deloading" else if (ratio >= 4.0) "Critical Debt" else if (ratio >= 3.0) "High Strain" else "Sustainable"
 
@@ -1061,8 +1105,11 @@ fun BehaviorScreen(
                                 Spacer(
                                     modifier = Modifier.height(4.dp)
                                 )
+
+                                val formatGrind = if (recoveryDebt.first % 1 == 0.0) recoveryDebt.first.toInt().toString() else recoveryDebt.first.toString()
+
                                 Text(
-                                    text = "${recoveryDebt.first} Grind : ${recoveryDebt.second} Rest",
+                                    text = "$formatGrind Grind : ${recoveryDebt.second} Rest",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
