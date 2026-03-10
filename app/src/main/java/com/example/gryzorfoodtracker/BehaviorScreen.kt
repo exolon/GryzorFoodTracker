@@ -45,7 +45,10 @@ import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BehaviorScreen(navController: NavController, db: AppDatabase) {
+fun BehaviorScreen(
+    navController: NavController,
+    db: AppDatabase
+) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val dao = db.mealDao()
@@ -63,12 +66,23 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
     val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
 
-    val last14Days = remember(today) { (13 downTo 0).map { today.minusDays(it.toLong()).toString() } }
-    val daysReversed = remember(last14Days) { last14Days.reversed() }
+    val last14Days = remember(today) {
+        (13 downTo 0).map { today.minusDays(it.toLong()).toString() }
+    }
+    val daysReversed = remember(last14Days) {
+        last14Days.reversed()
+    }
 
     val vixScore = remember(last14Days, allMetrics) {
-        val kcals = allMetrics.filter { last14Days.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
-        if (kcals.size < 2) 0 else {
+        val kcals = allMetrics.filter {
+            last14Days.contains(it.date)
+        }.mapNotNull {
+            it.totalKcal.toDoubleOrNull()
+        }
+
+        if (kcals.size < 2) {
+            0
+        } else {
             val mean = kcals.average()
             val variance = kcals.map { (it - mean).pow(2) }.average()
             sqrt(variance).toInt()
@@ -78,9 +92,11 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
     val fuelEfficiency = remember(last14Days, allMetrics, allTags) {
         var totalSurplusDays = 0
         var strategicSurplusDays = 0
+
         last14Days.forEach { date ->
             val metric = allMetrics.find { it.date == date }
             val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
+
             if (def < 0) {
                 totalSurplusDays++
                 val tagStr = allTags.find { it.date == date }?.tags ?: ""
@@ -89,14 +105,21 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 }
             }
         }
-        if (totalSurplusDays == 0) 100 else ((strategicSurplusDays.toFloat() / totalSurplusDays) * 100).toInt()
+
+        if (totalSurplusDays == 0) {
+            100
+        } else {
+            ((strategicSurplusDays.toFloat() / totalSurplusDays) * 100).toInt()
+        }
     }
 
     val burnoutRisk = remember(daysReversed, allMetrics, vixScore, phasePreference) {
-        if (phasePreference == "bulk") 0
-        else {
+        if (phasePreference == "bulk") {
+            0
+        } else {
             var streak = 0
             var recentDeficitSum = 0.0
+
             for (date in daysReversed) {
                 val metric = allMetrics.find { it.date == date }
                 val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
@@ -107,10 +130,13 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                     break
                 }
             }
+
             val avgStreakDef = if (streak > 0) recentDeficitSum / streak else 0.0
             var risk = streak * 10
+
             if (avgStreakDef > 600) risk += 15
             if (vixScore > 300) risk += 15
+
             risk.coerceIn(0, 100)
         }
     }
@@ -134,16 +160,22 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
             val def = allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
             def < 0
         }
-        if (surplusDays.isEmpty()) Pair("None", 0) else {
+
+        if (surplusDays.isEmpty()) {
+            Pair("None", 0)
+        } else {
             val tagCounts = mutableMapOf<String, Int>()
             surplusDays.forEach { date ->
                 val tags = allTags.find { it.date == date }?.tags?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                 if (tags.isEmpty()) {
                     tagCounts["Untagged"] = tagCounts.getOrDefault("Untagged", 0) + 1
                 } else {
-                    tags.forEach { tag -> tagCounts[tag] = tagCounts.getOrDefault(tag, 0) + 1 }
+                    tags.forEach { tag ->
+                        tagCounts[tag] = tagCounts.getOrDefault(tag, 0) + 1
+                    }
                 }
             }
+
             val worstTag = tagCounts.maxByOrNull { it.value }
             if (worstTag != null) {
                 Pair(worstTag.key, ((worstTag.value.toFloat() / surplusDays.size) * 100).toInt())
@@ -156,10 +188,16 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
     val frictionData = remember(last14Days, allMetrics, allTags, phasePreference) {
         var highFrictionDays = 0
         var highFrictionWins = 0
+
         last14Days.forEach { date ->
             val tags = allTags.find { it.date == date }?.tags ?: ""
             if (tags.contains("Friction:", ignoreCase = true)) {
-                val level = tags.split(",").find { it.trim().startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                val level = tags.split(",")
+                    .find { it.trim().startsWith("Friction:") }
+                    ?.substringAfter(":")
+                    ?.trim()
+                    ?.toIntOrNull() ?: 0
+
                 if (level >= 4) {
                     highFrictionDays++
                     val def = allMetrics.find { it.date == date }?.deficit?.toDoubleOrNull() ?: 0.0
@@ -168,23 +206,28 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 }
             }
         }
-        if (highFrictionDays == 0) -1 else ((highFrictionWins.toFloat() / highFrictionDays) * 100).toInt()
+
+        if (highFrictionDays == 0) {
+            -1
+        } else {
+            ((highFrictionWins.toFloat() / highFrictionDays) * 100).toInt()
+        }
     }
 
-    // --- V4.2 RECOVERY DEBT RATIO ---
     val recoveryDebt = remember(last14Days, allTags) {
         var grind = 0
         var rest = 0
+
         last14Days.forEach { d ->
             val t = allTags.find { it.date == d }?.tags ?: ""
             if (t.contains("Grind", ignoreCase = true)) grind++
             if (t.contains("Rest", ignoreCase = true)) rest++
         }
+
         val ratio = if (rest == 0) grind.toFloat() else grind.toFloat() / rest
         Triple(grind, rest, ratio)
     }
 
-    // --- V4.2 VELOCITY BURN-DOWN FORECAST ---
     val burnDownForecast = remember(last14Days, allMeasurements, targetWeightStr, phasePreference) {
         val target = targetWeightStr.toFloatOrNull()
         val sortedMeasures = last14Days.mapNotNull { d ->
@@ -249,7 +292,12 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
             TopAppBar(
                 title = { Text("Behavioral Engine") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            navController.popBackStack()
+                        }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -271,7 +319,11 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                 .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item {
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+            }
 
             // --- SECTION 1: BURNOUT METER ---
             item {
@@ -280,13 +332,17 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = "Predictive Degradation",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -305,6 +361,7 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             )
                         }
                     }
+
                     Text(
                         text = "Real-time psychological bandwidth & failure risk.",
                         style = MaterialTheme.typography.bodySmall,
@@ -326,13 +383,18 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
@@ -345,14 +407,19 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                 )
                             } else {
                                 val meterColor = if (burnoutRisk >= 80) MaterialTheme.colorScheme.error else if (burnoutRisk >= 50) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(
                                         imageVector = Icons.Filled.BatteryAlert,
                                         contentDescription = null,
                                         tint = meterColor,
                                         modifier = Modifier.size(24.dp)
                                     )
-                                    Spacer(Modifier.width(12.dp))
+                                    Spacer(
+                                        modifier = Modifier.width(12.dp)
+                                    )
                                     Text(
                                         text = "$burnoutRisk% Burnout Risk",
                                         style = MaterialTheme.typography.titleMedium,
@@ -361,7 +428,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(
+                                    modifier = Modifier.height(16.dp)
+                                )
 
                                 LinearProgressIndicator(
                                     progress = { burnoutRisk / 100f },
@@ -373,9 +442,12 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
 
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(
+                                    modifier = Modifier.height(16.dp)
+                                )
 
                                 val riskText = if (burnoutRisk >= 80) "Critical Fatigue. Willpower reserves depleted. A tactical Maintenance day is mathematically required." else if (burnoutRisk >= 50) "Moderate Fatigue. Deficit streak is taxing the system." else "System Stable. High cognitive bandwidth available."
+
                                 Surface(
                                     color = meterColor.copy(alpha = 0.1f),
                                     shape = RoundedCornerShape(8.dp)
@@ -405,7 +477,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -415,9 +489,14 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -458,7 +537,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
 
                                 val vixColor = if (vixScore > 300) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                 Text(
@@ -472,7 +553,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = vixColor
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
                                 Text(
                                     text = if (vixScore > 300) "High Volatility" else "Stable Variance",
                                     style = MaterialTheme.typography.labelSmall,
@@ -485,9 +568,14 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -528,7 +616,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
 
                                 val roiColor = if (fuelEfficiency >= 80) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 Text(
@@ -542,7 +632,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = roiColor
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
                                 Text(
                                     text = if (fuelEfficiency >= 80) "Capital Efficient" else "High Leakage",
                                     style = MaterialTheme.typography.labelSmall,
@@ -566,7 +658,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -576,9 +670,14 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -622,7 +721,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
 
                                 Text(
                                     text = "Momentum",
@@ -636,7 +737,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = if (isGood) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
                                 Text(
                                     text = "vs ${momentumData.second} (14D)",
                                     style = MaterialTheme.typography.labelSmall,
@@ -649,9 +752,14 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -691,7 +799,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
 
                                 Text(
                                     text = "Pareto Leakage",
@@ -704,7 +814,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.secondary
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
                                 Text(
                                     text = "${paretoLeakage.second}% of surplus days",
                                     style = MaterialTheme.typography.labelSmall,
@@ -728,13 +840,18 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
@@ -752,7 +869,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                         tint = egoColor,
                                         modifier = Modifier.size(24.dp)
                                     )
-                                    Spacer(Modifier.width(12.dp))
+                                    Spacer(
+                                        modifier = Modifier.width(12.dp)
+                                    )
                                     Text(
                                         text = "Ego Depletion Matrix",
                                         style = MaterialTheme.typography.titleMedium,
@@ -794,7 +913,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                 }
                             }
 
-                            Spacer(Modifier.height(16.dp))
+                            Spacer(
+                                modifier = Modifier.height(16.dp)
+                            )
 
                             if (frictionData == -1) {
                                 Text(
@@ -810,7 +931,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = egoColor
                                 )
-                                Spacer(Modifier.height(8.dp))
+                                Spacer(
+                                    modifier = Modifier.height(8.dp)
+                                )
                                 Text(
                                     text = if (frictionData >= 70) "Strong cognitive resilience. You are executing the plan despite systemic stress." else "Ego Depletion confirmed. High friction consistently breaks your adherence. Pre-plan Maintenance calories on high-stress days to prevent failure.",
                                     style = MaterialTheme.typography.bodySmall,
@@ -834,7 +957,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -845,9 +970,14 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -891,7 +1021,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
 
                                 Text(
                                     text = "Recovery Debt",
@@ -910,7 +1042,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = debtColor
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
                                 Text(
                                     text = "${recoveryDebt.first} Grind : ${recoveryDebt.second} Rest",
                                     style = MaterialTheme.typography.labelSmall,
@@ -924,9 +1058,14 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -967,7 +1106,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
 
                                 Text(
                                     text = "Target Horizon",
@@ -982,7 +1123,9 @@ fun BehaviorScreen(navController: NavController, db: AppDatabase) {
                                     fontWeight = FontWeight.Bold,
                                     color = if (isGood) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
                                 Text(
                                     text = if (targetWeightStr.isBlank()) "Set Target in Options" else "Goal: ${targetWeightStr}kg",
                                     style = MaterialTheme.typography.labelSmall,

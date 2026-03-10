@@ -25,7 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -45,6 +47,7 @@ import java.util.UUID
 @Composable
 fun SettingsScreen(navController: NavController, db: AppDatabase) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current // V4.3: Haptic Engine
     val coroutineScope = rememberCoroutineScope()
     val dao = db.mealDao()
 
@@ -141,6 +144,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             confirmButton = {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         val intent = Intent(context, MainActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                         context.startActivity(intent)
@@ -155,7 +159,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
 
     if (showManual) {
         AlertDialog(
-            onDismissRequest = { showManual = false },
+            onDismissRequest = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                showManual = false
+            },
             title = { Text("App Manual") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -178,7 +185,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Morning Intent: A daily modal prompting you to pre-load your physical strategy and cognitive load upon waking.\n• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Fasting).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).",
+                            text = "• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Recovery).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).",
                             style = MaterialTheme.typography.bodyMedium
                         )
 
@@ -190,27 +197,34 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Circuit Breaker: Automatically recommends tactical maintenance if Cognitive Load is logged at a 4 or 5.\n• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 14-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' to 'Rest' tags.",
+                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 14-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' to 'Rest' tags.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showManual = false }) { Text("Close") }
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showManual = false
+                    }
+                ) { Text("Close") }
             }
         )
     }
 
     if (showChangelog) {
         AlertDialog(
-            onDismissRequest = { showChangelog = false },
+            onDismissRequest = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                showChangelog = false
+            },
             title = { Text("Version History") },
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        // --- V4.3 CHANGELOG ADDITION ---
-                        "v4.3" to "The Intent Pass: Added the Morning Intent Protocol to pre-load daily strategy, and the Cognitive Circuit Breaker to automatically recommend tactical maintenance on high-stress days.",
+                        "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery' to better support the Recovery Debt ratio.",
                         "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio, and Long-Press Suggestion Banishment.",
                         "v4.1" to "The UX Polish Pass: Added explicit Help Tooltips to all charts and behavioral metrics. Isolated 'Cognitive Load' into a dedicated Dropdown Header Picker.",
                         "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
@@ -231,7 +245,12 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showChangelog = false }) { Text("Close") }
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showChangelog = false
+                    }
+                ) { Text("Close") }
             }
         )
     }
@@ -241,7 +260,12 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
             TopAppBar(
                 title = { Text("Options") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            navController.popBackStack()
+                        }
+                    ) {
                         Icon(Icons.Filled.ArrowBack, "Back")
                     }
                 },
@@ -296,6 +320,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     coroutineScope.launch {
                                         context.dataStore.edit { it[THEME_MODE_KEY] = key }
                                     }
@@ -364,6 +389,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 coroutineScope.launch {
                                     context.dataStore.edit { it[PHASE_MODE_KEY] = "cut" }
                                 }
@@ -391,6 +417,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 coroutineScope.launch {
                                     context.dataStore.edit { it[PHASE_MODE_KEY] = "bulk" }
                                 }
@@ -457,6 +484,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         Spacer(Modifier.width(12.dp))
                         Button(
                             onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 if (newTagText.isNotBlank()) {
                                     coroutineScope.launch {
                                         context.dataStore.edit { prefs ->
@@ -489,6 +517,7 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     Text(tag, style = MaterialTheme.typography.bodyLarge)
                     IconButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             coroutineScope.launch {
                                 context.dataStore.edit { prefs ->
                                     val updatedSet = HashSet(prefs[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS)
@@ -534,7 +563,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { exportLauncher.launch("food_tracker_db_${LocalDate.now()}.db") }
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                exportLauncher.launch("food_tracker_db_${LocalDate.now()}.db")
+                            }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -552,7 +584,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { importLauncher.launch(arrayOf("*/*")) }
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                importLauncher.launch(arrayOf("*/*"))
+                            }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -580,7 +615,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showManual = true }
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showManual = true
+                            }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -598,7 +636,10 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showChangelog = true }
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showChangelog = true
+                            }
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -629,7 +670,6 @@ fun SettingsScreen(navController: NavController, db: AppDatabase) {
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.outline
                     )
-                    // --- V4.3 BUMP ---
                     Text(
                         text = "v4.3",
                         style = MaterialTheme.typography.labelMedium,

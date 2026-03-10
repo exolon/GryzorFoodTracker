@@ -5,7 +5,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -16,7 +15,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -43,28 +41,70 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 val GoogleSansFlex = FontFamily(
-    Font(R.font.google_sans_flex, FontWeight.Normal),
-    Font(R.font.google_sans_flex, FontWeight.Medium),
-    Font(R.font.google_sans_flex, FontWeight.SemiBold),
-    Font(R.font.google_sans_flex, FontWeight.Bold)
+    Font(
+        resId = R.font.google_sans_flex,
+        weight = FontWeight.Normal
+    ),
+    Font(
+        resId = R.font.google_sans_flex,
+        weight = FontWeight.Medium
+    ),
+    Font(
+        resId = R.font.google_sans_flex,
+        weight = FontWeight.SemiBold
+    ),
+    Font(
+        resId = R.font.google_sans_flex,
+        weight = FontWeight.Bold
+    )
 )
 
 val AppTypography = Typography(
-    displayLarge = Typography().displayLarge.copy(fontFamily = GoogleSansFlex),
-    displayMedium = Typography().displayMedium.copy(fontFamily = GoogleSansFlex),
-    displaySmall = Typography().displaySmall.copy(fontFamily = GoogleSansFlex),
-    headlineLarge = Typography().headlineLarge.copy(fontFamily = GoogleSansFlex),
-    headlineMedium = Typography().headlineMedium.copy(fontFamily = GoogleSansFlex),
-    headlineSmall = Typography().headlineSmall.copy(fontFamily = GoogleSansFlex),
-    titleLarge = Typography().titleLarge.copy(fontFamily = GoogleSansFlex),
-    titleMedium = Typography().titleMedium.copy(fontFamily = GoogleSansFlex),
-    titleSmall = Typography().titleSmall.copy(fontFamily = GoogleSansFlex),
-    bodyLarge = Typography().bodyLarge.copy(fontFamily = GoogleSansFlex),
-    bodyMedium = Typography().bodyMedium.copy(fontFamily = GoogleSansFlex),
-    bodySmall = Typography().bodySmall.copy(fontFamily = GoogleSansFlex),
-    labelLarge = Typography().labelLarge.copy(fontFamily = GoogleSansFlex),
-    labelMedium = Typography().labelMedium.copy(fontFamily = GoogleSansFlex),
-    labelSmall = Typography().labelSmall.copy(fontFamily = GoogleSansFlex)
+    displayLarge = Typography().displayLarge.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    displayMedium = Typography().displayMedium.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    displaySmall = Typography().displaySmall.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    headlineLarge = Typography().headlineLarge.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    headlineMedium = Typography().headlineMedium.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    headlineSmall = Typography().headlineSmall.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    titleLarge = Typography().titleLarge.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    titleMedium = Typography().titleMedium.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    titleSmall = Typography().titleSmall.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    bodyLarge = Typography().bodyLarge.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    bodyMedium = Typography().bodyMedium.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    bodySmall = Typography().bodySmall.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    labelLarge = Typography().labelLarge.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    labelMedium = Typography().labelMedium.copy(
+        fontFamily = GoogleSansFlex
+    ),
+    labelSmall = Typography().labelSmall.copy(
+        fontFamily = GoogleSansFlex
+    )
 )
 
 fun getMealIcon(type: String): ImageVector {
@@ -92,6 +132,7 @@ fun rememberGyroscopeTilt(): Pair<Float, Float> {
                 if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
                     val rotationMatrix = FloatArray(9)
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+
                     val orientationAngles = FloatArray(3)
                     SensorManager.getOrientation(rotationMatrix, orientationAngles)
 
@@ -102,8 +143,15 @@ fun rememberGyroscopeTilt(): Pair<Float, Float> {
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
-        onDispose { sensorManager.unregisterListener(listener) }
+        sensorManager.registerListener(
+            listener,
+            sensor,
+            SensorManager.SENSOR_DELAY_GAME
+        )
+
+        onDispose {
+            sensorManager.unregisterListener(listener)
+        }
     }
 
     return Pair(pitch, roll)
@@ -127,9 +175,13 @@ fun LargeDayHeader(
     onNext: () -> Unit,
     onCopy: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+
     LargeTopAppBar(
         title = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -137,15 +189,23 @@ fun LargeDayHeader(
                 ) {
                     Text(
                         text = date.format(DateTimeFormatter.ofPattern("EEEE")),
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        )
                     )
 
                     var expanded by remember { mutableStateOf(false) }
-                    Box(modifier = Modifier.padding(end = 16.dp)) {
+
+                    Box(
+                        modifier = Modifier.padding(end = 16.dp)
+                    ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (frictionScore >= 4) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.clickable { expanded = true }
+                            modifier = Modifier.clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                expanded = true
+                            }
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -157,7 +217,9 @@ fun LargeDayHeader(
                                     modifier = Modifier.size(16.dp),
                                     tint = if (frictionScore >= 4) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                 )
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(
+                                    modifier = Modifier.width(4.dp)
+                                )
                                 Text(
                                     text = if (frictionScore > 0) "Load: $frictionScore/5" else "Set Load",
                                     style = MaterialTheme.typography.labelMedium,
@@ -165,14 +227,18 @@ fun LargeDayHeader(
                                 )
                             }
                         }
+
                         DropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
                         ) {
                             (1..5).forEach { level ->
                                 DropdownMenuItem(
-                                    text = { Text("Level $level Friction") },
+                                    text = {
+                                        Text(text = "Level $level Friction")
+                                    },
                                     onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onFrictionChange(level)
                                         expanded = false
                                     }
@@ -181,8 +247,14 @@ fun LargeDayHeader(
                             if (frictionScore > 0) {
                                 HorizontalDivider()
                                 DropdownMenuItem(
-                                    text = { Text("Clear", color = MaterialTheme.colorScheme.error) },
+                                    text = {
+                                        Text(
+                                            text = "Clear",
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    },
                                     onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onFrictionChange(0)
                                         expanded = false
                                     }
@@ -194,21 +266,28 @@ fun LargeDayHeader(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(end = 16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 16.dp)
                 ) {
                     Text(
                         text = date.format(DateTimeFormatter.ofPattern("MMMM dd, yyyy")),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.secondary
                     )
+
                     if (!dailyKcal.isNullOrBlank() || !dailyDeficit.isNullOrBlank() || !dailyWeight.isNullOrBlank() || !dailyFat.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
                         Text(
                             text = "•",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.outline
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
 
                         val macros = listOf(
                             dailyKcal?.let { "$it Kcal" },
@@ -233,7 +312,12 @@ fun LargeDayHeader(
             }
         },
         navigationIcon = {
-            IconButton(onClick = onPrev) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onPrev()
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.ChevronLeft,
                     contentDescription = "Previous",
@@ -242,32 +326,57 @@ fun LargeDayHeader(
             }
         },
         actions = {
-            IconButton(onClick = onNext) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onNext()
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,
                     contentDescription = "Next",
                     modifier = Modifier.size(32.dp)
                 )
             }
-            IconButton(onClick = onBehaviorClick) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onBehaviorClick()
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Insights,
                     contentDescription = "Behavioral Engine"
                 )
             }
-            IconButton(onClick = onAnalyticsClick) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onAnalyticsClick()
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Assessment,
                     contentDescription = "Analytics"
                 )
             }
-            IconButton(onClick = onCopy) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCopy()
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Share,
                     contentDescription = "Share Markdown"
                 )
             }
-            IconButton(onClick = onSettingsClick) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onSettingsClick()
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = "Options"
@@ -293,14 +402,18 @@ fun MealCard(
     onDuplicate: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = {
             when (it) {
                 SwipeToDismissBoxValue.EndToStart -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onDelete()
                     true
                 }
                 SwipeToDismissBoxValue.StartToEnd -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onDuplicate()
                     false
                 }
@@ -336,9 +449,12 @@ fun MealCard(
                 else -> Color.Transparent
             }
             Box(
-                Modifier
+                modifier = Modifier
                     .fillMaxSize()
-                    .background(color, RoundedCornerShape(24.dp))
+                    .background(
+                        color = color,
+                        shape = RoundedCornerShape(24.dp)
+                    )
                     .padding(horizontal = 24.dp)
             ) {
                 if (direction == SwipeToDismissBoxValue.EndToStart) {
@@ -363,7 +479,10 @@ fun MealCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .clickable { onClick() }
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
                 .graphicsLayer {
                     rotationX = (pitch * 0.15f).coerceIn(-8f, 8f)
                     rotationY = (roll * 0.15f).coerceIn(-8f, 8f)
@@ -371,7 +490,10 @@ fun MealCard(
                 },
             shape = RoundedCornerShape(24.dp),
             color = cardColor,
-            border = BorderStroke(1.dp, borderColor)
+            border = BorderStroke(
+                width = 1.dp,
+                color = borderColor
+            )
         ) {
             Row(
                 modifier = Modifier
@@ -396,17 +518,25 @@ fun MealCard(
                     )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(
+                    modifier = Modifier.width(16.dp)
+                )
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
                         text = entry.type.uppercase(),
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 1.2.sp
+                        ),
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = entry.description,
-                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            lineHeight = 22.sp
+                        ),
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -435,6 +565,8 @@ fun AddMealDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+
     var mealText by remember { mutableStateOf(initialDesc ?: existingMeal?.description ?: "") }
     var selectedMealType by remember { mutableStateOf(initialType ?: existingMeal?.type ?: "Lunch") }
 
@@ -463,51 +595,84 @@ fun AddMealDialog(
 
     if (suggestionToBan != null) {
         AlertDialog(
-            onDismissRequest = { suggestionToBan = null },
-            title = { Text("Remove Suggestion") },
-            text = { Text("Hide '$suggestionToBan' from future suggestions?") },
+            onDismissRequest = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                suggestionToBan = null
+            },
+            title = {
+                Text(text = "Remove Suggestion")
+            },
+            text = {
+                Text(text = "Hide '$suggestionToBan' from future suggestions?")
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onBanSuggestion(suggestionToBan!!)
                         suggestionToBan = null
                     }
                 ) {
-                    Text("Hide", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = "Hide",
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { suggestionToBan = null }) {
-                    Text("Cancel")
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        suggestionToBan = null
+                    }
+                ) {
+                    Text(text = "Cancel")
                 }
             }
         )
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onDismiss()
+        },
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
     ) {
         Surface(
             shape = RoundedCornerShape(32.dp),
             tonalElevation = 6.dp,
             modifier = Modifier.widthIn(max = 400.dp)
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
+            Column(
+                modifier = Modifier.padding(24.dp)
+            ) {
                 Text(
                     text = if (isDuplicating) "Duplicate Entry" else if (existingMeal != null) "Update Entry" else "New Entry",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
 
                 AssistChip(
-                    onClick = { showTimePicker = true },
-                    label = { Text("At $mealTime", style = MaterialTheme.typography.bodyLarge) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showTimePicker = true
+                    },
+                    label = {
+                        Text(
+                            text = "At $mealTime",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Schedule,
@@ -518,14 +683,23 @@ fun AddMealDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items(mealTypes) { type ->
                         FilterChip(
                             selected = selectedMealType == type,
-                            onClick = { selectedMealType = type },
-                            label = { Text(type) },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMealType = type
+                            },
+                            label = {
+                                Text(text = type)
+                            },
                             leadingIcon = {
                                 Icon(
                                     imageVector = getMealIcon(type),
@@ -538,12 +712,18 @@ fun AddMealDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
 
                 OutlinedTextField(
                     value = mealText,
-                    onValueChange = { mealText = it },
-                    placeholder = { Text("What are we logging?") },
+                    onValueChange = {
+                        mealText = it
+                    },
+                    placeholder = {
+                        Text(text = "What are we logging?")
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     minLines = 3
@@ -563,8 +743,14 @@ fun AddMealDialog(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .combinedClickable(
-                                        onClick = { mealText = suggestion },
-                                        onLongClick = { suggestionToBan = suggestion }
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            mealText = suggestion
+                                        },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            suggestionToBan = suggestion
+                                        }
                                     )
                             ) {
                                 Text(
@@ -578,25 +764,37 @@ fun AddMealDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                    TextButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onDismiss()
+                        }
+                    ) {
+                        Text(text = "Cancel")
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Spacer(
+                        modifier = Modifier.width(8.dp)
+                    )
+
                     Button(
                         onClick = {
                             if (mealText.isNotBlank()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onSave(mealTime, selectedMealType, mealText)
                             }
                         },
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Save Entry")
+                        Text(text = "Save Entry")
                     }
                 }
             }
@@ -605,15 +803,19 @@ fun AddMealDialog(
 
     if (showTimePicker) {
         DatePickerDialog(
-            onDismissRequest = { showTimePicker = false },
+            onDismissRequest = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                showTimePicker = false
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         mealTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
                         showTimePicker = false
                     }
                 ) {
-                    Text("OK")
+                    Text(text = "OK")
                 }
             }
         ) {
@@ -621,234 +823,6 @@ fun AddMealDialog(
                 state = timePickerState,
                 modifier = Modifier.padding(24.dp)
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MorningIntentDialog(
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit
-) {
-    var frictionLevel by remember { mutableIntStateOf(0) }
-    var selectedIntent by remember { mutableStateOf<String?>(null) }
-    var isCompromised by remember { mutableStateOf(false) }
-    var showHelp by remember { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Morning Intent",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                showHelp = !showHelp
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.QuestionMark,
-                            contentDescription = "Info",
-                            modifier = Modifier.padding(4.dp)
-                        )
-                    }
-                }
-
-                AnimatedVisibility(visible = showHelp) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.padding(top = 16.dp)
-                    ) {
-                        Text(
-                            text = "Implementation Intention: Pre-loading your daily strategy bypasses decision fatigue later. If high cognitive load is detected, the Circuit Breaker will recommend adjusting targets to prevent system burnout.",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                Text(
-                    text = "Current Cognitive Load",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    (1..5).forEach { level ->
-                        val isSelected = frictionLevel == level
-                        val containerColor = if (isSelected && level >= 4) MaterialTheme.colorScheme.errorContainer
-                        else if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant
-
-                        val contentColor = if (isSelected && level >= 4) MaterialTheme.colorScheme.onErrorContainer
-                        else if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-
-                        Surface(
-                            shape = CircleShape,
-                            color = containerColor,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    frictionLevel = level
-                                }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "$level",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = contentColor,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-
-                AnimatedVisibility(visible = frictionLevel >= 4) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .padding(top = 16.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.BatteryAlert,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = "Circuit Breaker Active. High stress detected. Tactical Maintenance recommended today.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                Text(
-                    text = "Physical Intent",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Grind", "Rest", "Fasting").forEach { intent ->
-                        FilterChip(
-                            selected = selectedIntent == intent,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                selectedIntent = intent
-                                if (intent != "Grind") isCompromised = false
-                            },
-                            label = { Text(intent) },
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-                }
-
-                AnimatedVisibility(visible = selectedIntent == "Grind") {
-                    Column(modifier = Modifier.padding(top = 16.dp)) {
-                        Text(
-                            text = "Leg Status",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = !isCompromised,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    isCompromised = false
-                                },
-                                label = { Text("Standard") },
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            FilterChip(
-                                selected = isCompromised,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    isCompromised = true
-                                },
-                                label = { Text("Compromised (Upper Bias)") },
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(32.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Skip")
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val tagsToSave = mutableListOf<String>()
-                            if (frictionLevel > 0) {
-                                tagsToSave.add("Friction: $frictionLevel")
-                            }
-                            if (selectedIntent != null) {
-                                tagsToSave.add(selectedIntent!!)
-                            }
-                            if (selectedIntent == "Grind" && isCompromised) {
-                                tagsToSave.add("Upper Body Bias")
-                            }
-                            onSave(tagsToSave.joinToString(","))
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = selectedIntent != null || frictionLevel > 0
-                    ) {
-                        Text("Lock Intent")
-                    }
-                }
-            }
         }
     }
 }

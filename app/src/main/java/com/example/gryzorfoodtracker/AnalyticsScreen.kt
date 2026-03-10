@@ -66,7 +66,10 @@ data class TagStat(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
+fun AnalyticsScreen(
+    navController: NavController,
+    db: AppDatabase
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val dao = db.mealDao()
@@ -78,7 +81,6 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
         .map { it[PHASE_MODE_KEY] ?: "cut" }
         .collectAsState(initial = "cut")
 
-    // --- V4.2 SELF-HEALING MATRIX IMPORT ---
     val customTags by context.dataStore.data
         .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
         .collectAsState(initial = DEFAULT_TAGS)
@@ -89,14 +91,39 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
     val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
 
-    val currentWeekDates = remember(today) { (0..6).map { today.minusDays(it.toLong()).toString() } }
-    val prevWeekDates = remember(today) { (7..13).map { today.minusDays(it.toLong()).toString() } }
-    val last14Days = remember(today) { (13 downTo 0).map { today.minusDays(it.toLong()).toString() } }
+    val currentWeekDates = remember(today) {
+        (0..6).map { today.minusDays(it.toLong()).toString() }
+    }
+    val prevWeekDates = remember(today) {
+        (7..13).map { today.minusDays(it.toLong()).toString() }
+    }
+    val last14Days = remember(today) {
+        (13 downTo 0).map { today.minusDays(it.toLong()).toString() }
+    }
 
-    val currentKcal = allMetrics.filter { currentWeekDates.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
-    val prevKcal = allMetrics.filter { prevWeekDates.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
-    val currentDef = allMetrics.filter { currentWeekDates.contains(it.date) }.mapNotNull { it.deficit.toDoubleOrNull() }
-    val prevDef = allMetrics.filter { prevWeekDates.contains(it.date) }.mapNotNull { it.deficit.toDoubleOrNull() }
+    val currentKcal = allMetrics.filter {
+        currentWeekDates.contains(it.date)
+    }.mapNotNull {
+        it.totalKcal.toDoubleOrNull()
+    }
+
+    val prevKcal = allMetrics.filter {
+        prevWeekDates.contains(it.date)
+    }.mapNotNull {
+        it.totalKcal.toDoubleOrNull()
+    }
+
+    val currentDef = allMetrics.filter {
+        currentWeekDates.contains(it.date)
+    }.mapNotNull {
+        it.deficit.toDoubleOrNull()
+    }
+
+    val prevDef = allMetrics.filter {
+        prevWeekDates.contains(it.date)
+    }.mapNotNull {
+        it.deficit.toDoubleOrNull()
+    }
 
     val curKcalAvg = if (currentKcal.isNotEmpty()) currentKcal.average().toInt() else 0
     val prevKcalAvg = if (prevKcal.isNotEmpty()) prevKcal.average().toInt() else 0
@@ -111,7 +138,6 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
         val tagMap = mutableMapOf<String, MutableList<DailyMetricEntity>>()
 
         allTags.forEach { tagEntity ->
-            // FIXED: Exclude Friction tags AND filter out orphaned ghost tags
             val dayTags = tagEntity.tags.split(",")
                 .map { it.trim() }
                 .filter { tagString ->
@@ -121,6 +147,7 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                 }
 
             val metricForDay = metricsMap[tagEntity.date]
+
             if (metricForDay != null) {
                 dayTags.forEach { tag ->
                     tagMap.getOrPut(tag) { mutableListOf() }.add(metricForDay)
@@ -136,7 +163,13 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
             }
             val winRate = if (totalDays > 0) (successDays.toFloat() / totalDays * 100).toInt() else 0
             val avgDeficit = if (totalDays > 0) metrics.mapNotNull { it.deficit.toDoubleOrNull() }.average().toInt() else 0
-            TagStat(tag, totalDays, winRate, avgDeficit)
+
+            TagStat(
+                tag = tag,
+                totalDays = totalDays,
+                winRate = winRate,
+                avgDeficit = avgDeficit
+            )
         }.sortedByDescending { it.totalDays }
     }
 
@@ -145,6 +178,7 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
                     context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        // FIXED: Removed explicit parameter names to perfectly match your PDF Generator signature
                         generateExecutiveSummaryPdf(
                             outputStream,
                             phasePreference,
@@ -156,9 +190,13 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             allMeasurements
                         )
                     }
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Executive Summary Saved!", Toast.LENGTH_SHORT).show() }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Executive Summary Saved!", Toast.LENGTH_SHORT).show()
+                    }
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Failed to generate PDF", Toast.LENGTH_SHORT).show() }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to generate PDF", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -166,22 +204,39 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
 
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        entrance.animateTo(1f, animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow))
+        entrance.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessVeryLow)
+        )
     }
 
     val animProgress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        animProgress.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing))
+        animProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(1200, easing = FastOutSlowInEasing)
+        )
     }
 
-    val displayKcal by animateIntAsState(targetValue = curKcalAvg, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "kcalTicker")
-    val displayDef by animateIntAsState(targetValue = curDefAvg, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "defTicker")
+    val displayKcal by animateIntAsState(
+        targetValue = curKcalAvg,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "kcalTicker"
+    )
+    val displayDef by animateIntAsState(
+        targetValue = curDefAvg,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "defTicker"
+    )
 
     val infiniteTransition = rememberInfiniteTransition(label = "aura")
     val auraPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
         label = "auraPhase"
     )
 
@@ -190,7 +245,10 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
     val highlightColor = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 
     val auraBrush = Brush.linearGradient(
-        colors = listOf(baseContainer, highlightColor.copy(alpha = 0.15f + (0.1f * auraPhase))),
+        colors = listOf(
+            baseContainer,
+            highlightColor.copy(alpha = 0.15f + (0.1f * auraPhase))
+        ),
         start = Offset(0f, 0f),
         end = Offset(1000f, 1000f)
     )
@@ -206,18 +264,33 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Analytics Dashboard") },
+                title = {
+                    Text(text = "Analytics Dashboard")
+                },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            navController.popBackStack()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        exportPdfLauncher.launch("Gryzor_Summary_${LocalDate.now()}.pdf")
-                    }) {
-                        Icon(Icons.Filled.Assessment, "Export PDF Report")
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            exportPdfLauncher.launch("Gryzor_Summary_${LocalDate.now()}.pdf")
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Assessment,
+                            contentDescription = "Export PDF Report"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -247,9 +320,16 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Velocity & Trajectory", style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Velocity & Trajectory",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -284,9 +364,13 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
@@ -296,18 +380,42 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                     cameraDistance = 12f * density
                                 },
                             shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
                         ) {
-                            Box(modifier = Modifier.background(auraBrush).padding(16.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .background(auraBrush)
+                                    .padding(16.dp)
+                            ) {
                                 Column {
-                                    Text("7-Day Avg Kcal", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(text = "$displayKcal", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight(typeWeightKcal)), color = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        text = "7-Day Avg Kcal",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "$displayKcal",
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontWeight = FontWeight(typeWeightKcal)
+                                        ),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+
                                     val arrowKcal = if (diffKcal > 0) "↑" else if (diffKcal < 0) "↓" else "="
                                     val colorKcal = if (diffKcal > 0) MaterialTheme.colorScheme.error else if (diffKcal < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    Text("$arrowKcal ${abs(diffKcal)} vs last wk", style = MaterialTheme.typography.labelSmall, color = colorKcal)
+
+                                    Text(
+                                        text = "$arrowKcal ${abs(diffKcal)} vs last wk",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorKcal
+                                    )
                                 }
                             }
                         }
+
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
@@ -317,15 +425,42 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                     cameraDistance = 12f * density
                                 },
                             shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
                         ) {
-                            Box(modifier = Modifier.background(auraBrush).padding(16.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .background(auraBrush)
+                                    .padding(16.dp)
+                            ) {
                                 Column {
-                                    Text(if (phasePreference == "bulk") "7-Day Avg Surplus" else "7-Day Avg Deficit", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(text = "$displayDef", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight(typeWeightDef)), color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                                    Text(
+                                        text = if (phasePreference == "bulk") "7-Day Avg Surplus" else "7-Day Avg Deficit",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "$displayDef",
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontWeight = FontWeight(typeWeightDef)
+                                        ),
+                                        color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+
                                     val arrowDef = if (diffDef > 0) "↑" else if (diffDef < 0) "↓" else "="
-                                    val colorDef = if (phasePreference == "cut") { if (diffDef < 0) MaterialTheme.colorScheme.primary else if (diffDef > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline } else { if (diffDef > 0) MaterialTheme.colorScheme.error else if (diffDef < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline }
-                                    Text("$arrowDef ${abs(diffDef)} vs last wk", style = MaterialTheme.typography.labelSmall, color = colorDef)
+                                    val colorDef = if (phasePreference == "cut") {
+                                        if (diffDef < 0) MaterialTheme.colorScheme.primary else if (diffDef > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                                    } else {
+                                        if (diffDef > 0) MaterialTheme.colorScheme.error else if (diffDef < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    }
+
+                                    Text(
+                                        text = "$arrowDef ${abs(diffDef)} vs last wk",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorDef
+                                    )
                                 }
                             }
                         }
@@ -336,14 +471,22 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
             // --- 2. CONSISTENCY HEATMAP ---
             item {
                 val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+
                 Column(
                     modifier = elasticMod(1)
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Consistency Heatmap", style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Consistency Heatmap",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -362,7 +505,11 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             )
                         }
                     }
-                    Text("Last 30 days. Tap a day to view log.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        text = "Last 30 days. Tap a day to view log.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
 
                     AnimatedVisibility(visible = showHeatmapTooltip) {
                         Surface(
@@ -379,16 +526,23 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
                     ) {
                         FlowRow(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -396,7 +550,14 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                 val metric = allMetrics.find { it.date == date }
                                 val defValue = metric?.deficit?.toDoubleOrNull()
                                 val isDaySuccess = if (phasePreference == "bulk") (defValue ?: 0.0) < 0 else (defValue ?: 0.0) > 0
-                                val boxColor = if (defValue == null || defValue == 0.0) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f) else if (isDaySuccess) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+
+                                val boxColor = if (defValue == null || defValue == 0.0) {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                } else if (isDaySuccess) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                } else {
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                                }
 
                                 Box(
                                     modifier = Modifier
@@ -420,8 +581,15 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
                 val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
-                val dateStyle = TextStyle(fontSize = 9.sp, color = MaterialTheme.colorScheme.outline)
-                val tooltipStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                val dateStyle = TextStyle(
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                val tooltipStyle = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
                 var tappedMacro by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
 
                 Column(
@@ -429,9 +597,16 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("14-Day Macro Trend", style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "14-Day Macro Trend",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -450,7 +625,11 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             )
                         }
                     }
-                    Text("Shaded = 'Grind'. Primary = Kcal, Red = Deficit.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        text = "Shaded = 'Grind'. Primary = Kcal, Red = Deficit.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
 
                     AnimatedVisibility(visible = showMacroTooltip) {
                         Surface(
@@ -467,7 +646,9 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Surface(
                         modifier = Modifier
@@ -475,38 +656,48 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             .height(190.dp),
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        ) {
                             Canvas(
-                                modifier = Modifier.fillMaxSize().pointerInput(allMetrics) {
-                                    detectTapGestures { tapOffset ->
-                                        val stepX = size.width / 13f
-                                        val paddingBottom = 40f
-                                        val graphHeight = size.height - paddingBottom
-                                        val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
-                                        val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
-                                        val totalRange = maxKcal - minDeficit
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(allMetrics) {
+                                        detectTapGestures { tapOffset ->
+                                            val stepX = size.width / 13f
+                                            val paddingBottom = 40f
+                                            val graphHeight = size.height - paddingBottom
+                                            val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
+                                            val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
+                                            val totalRange = maxKcal - minDeficit
 
-                                        val points = mutableListOf<Triple<Offset, String, Color>>()
-                                        last14Days.forEachIndexed { index, date ->
-                                            val metric = allMetrics.find { it.date == date }
-                                            val x = index * stepX
-                                            val kcal = metric?.totalKcal?.toFloatOrNull()
-                                            if (kcal != null) points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} Kcal", primaryColor))
-                                            val deficit = metric?.deficit?.toFloatOrNull()
-                                            if (deficit != null) points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
-                                        }
+                                            val points = mutableListOf<Triple<Offset, String, Color>>()
 
-                                        val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
-                                        if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
-                                            tappedMacro = closest
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        } else {
-                                            tappedMacro = null
+                                            last14Days.forEachIndexed { index, date ->
+                                                val metric = allMetrics.find { it.date == date }
+                                                val x = index * stepX
+                                                val kcal = metric?.totalKcal?.toFloatOrNull()
+                                                if (kcal != null) points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} Kcal", primaryColor))
+                                                val deficit = metric?.deficit?.toFloatOrNull()
+                                                if (deficit != null) points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
+                                            }
+
+                                            val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
+                                            if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
+                                                tappedMacro = closest
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            } else {
+                                                tappedMacro = null
+                                            }
                                         }
                                     }
-                                }
                             ) {
                                 val stepX = size.width / 13f
                                 val paddingBottom = 40f
@@ -604,8 +795,16 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                drawPath(path = kcalPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
-                                drawPath(path = deficitPath, color = errorColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
+                                drawPath(
+                                    path = kcalPath,
+                                    color = primaryColor.copy(alpha = animProgress.value),
+                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
+                                )
+                                drawPath(
+                                    path = deficitPath,
+                                    color = errorColor.copy(alpha = animProgress.value),
+                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
+                                )
 
                                 tappedMacro?.let { (offset, text, color) ->
                                     val textLayout = textMeasurer.measure(text, tooltipStyle)
@@ -638,8 +837,15 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
-                val dateStyle = TextStyle(fontSize = 9.sp, color = MaterialTheme.colorScheme.outline)
-                val tooltipStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                val dateStyle = TextStyle(
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                val tooltipStyle = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
                 var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
 
                 Column(
@@ -647,9 +853,16 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Body Composition Trend", style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Body Composition Trend",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(
+                            modifier = Modifier.width(8.dp)
+                        )
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -668,7 +881,11 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             )
                         }
                     }
-                    Text("Primary = Weight (66-85kg), Secondary = Fat (10-25%).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        text = "Primary = Weight (66-85kg), Secondary = Fat (10-25%).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
 
                     AnimatedVisibility(visible = showCompTooltip) {
                         Surface(
@@ -684,47 +901,60 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             )
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     Surface(
-                        modifier = Modifier.fillMaxWidth().height(190.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(190.dp),
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        ) {
                             Canvas(
-                                modifier = Modifier.fillMaxSize().pointerInput(allMeasurements) {
-                                    detectTapGestures { tapOffset ->
-                                        val stepX = size.width / 13f
-                                        val paddingBottom = 40f
-                                        val graphHeight = size.height - paddingBottom
-                                        val maxWeight = 85f
-                                        val minWeight = 66f
-                                        val rangeW = maxWeight - minWeight
-                                        val maxFat = 25f
-                                        val minFat = 10f
-                                        val rangeF = maxFat - minFat
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(allMeasurements) {
+                                        detectTapGestures { tapOffset ->
+                                            val stepX = size.width / 13f
+                                            val paddingBottom = 40f
+                                            val graphHeight = size.height - paddingBottom
+                                            val maxWeight = 85f
+                                            val minWeight = 66f
+                                            val rangeW = maxWeight - minWeight
+                                            val maxFat = 25f
+                                            val minFat = 10f
+                                            val rangeF = maxFat - minFat
 
-                                        val points = mutableListOf<Triple<Offset, String, Color>>()
-                                        last14Days.forEachIndexed { index, date ->
-                                            val measure = allMeasurements.find { it.date == date }
-                                            val x = index * stepX
-                                            val w = measure?.weight?.toFloatOrNull()
-                                            if (w != null) points.add(Triple(Offset(x, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg", primaryColor))
-                                            val f = measure?.bodyFat?.toFloatOrNull()
-                                            if (f != null) points.add(Triple(Offset(x, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%", secColor))
-                                        }
+                                            val points = mutableListOf<Triple<Offset, String, Color>>()
+                                            last14Days.forEachIndexed { index, date ->
+                                                val measure = allMeasurements.find { it.date == date }
+                                                val x = index * stepX
+                                                val w = measure?.weight?.toFloatOrNull()
+                                                if (w != null) points.add(Triple(Offset(x, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg", primaryColor))
+                                                val f = measure?.bodyFat?.toFloatOrNull()
+                                                if (f != null) points.add(Triple(Offset(x, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%", secColor))
+                                            }
 
-                                        val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
-                                        if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
-                                            tappedComp = closest
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        } else {
-                                            tappedComp = null
+                                            val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
+                                            if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
+                                                tappedComp = closest
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            } else {
+                                                tappedComp = null
+                                            }
                                         }
                                     }
-                                }
                             ) {
                                 val stepX = size.width / 13f
                                 val paddingBottom = 40f
@@ -807,8 +1037,16 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                     )
                                 }
 
-                                drawPath(path = wPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
-                                drawPath(path = fPath, color = secColor.copy(alpha = animProgress.value), style = Stroke(width = 4f, cap = StrokeCap.Round))
+                                drawPath(
+                                    path = wPath,
+                                    color = primaryColor.copy(alpha = animProgress.value),
+                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
+                                )
+                                drawPath(
+                                    path = fPath,
+                                    color = secColor.copy(alpha = animProgress.value),
+                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
+                                )
 
                                 tappedComp?.let { (offset, text, color) ->
                                     val textLayout = textMeasurer.measure(text, tooltipStyle)
@@ -840,15 +1078,23 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
             // --- 5. BEHAVIORAL COMPLIANCE MATRIX ---
             item {
                 var showTooltip by remember { mutableStateOf(false) }
+
                 if (tagStats.isNotEmpty()) {
                     Column(
                         modifier = elasticMod(4)
                             .fillMaxWidth()
                             .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Behavioral Compliance Matrix", style = MaterialTheme.typography.labelLarge)
-                            Spacer(Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Behavioral Compliance Matrix",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Spacer(
+                                modifier = Modifier.width(8.dp)
+                            )
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -884,22 +1130,35 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                             }
                         }
 
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
 
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
                                 tagStats.forEachIndexed { index, stat ->
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column(modifier = Modifier.weight(1f)) {
+                                        Column(
+                                            modifier = Modifier.weight(1f)
+                                        ) {
                                             Text(
                                                 text = stat.tag,
                                                 style = MaterialTheme.typography.bodyLarge,
@@ -912,8 +1171,12 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                                 color = MaterialTheme.colorScheme.outline
                                             )
                                         }
-                                        Column(horizontalAlignment = Alignment.End) {
+
+                                        Column(
+                                            horizontalAlignment = Alignment.End
+                                        ) {
                                             val rateColor = if (stat.winRate >= 70) MaterialTheme.colorScheme.primary else if (stat.winRate >= 40) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+
                                             Text(
                                                 text = "${stat.winRate}% Success",
                                                 style = MaterialTheme.typography.bodyMedium,
@@ -927,8 +1190,11 @@ fun AnalyticsScreen(navController: NavController, db: AppDatabase) {
                                             )
                                         }
                                     }
+
                                     if (index < tagStats.size - 1) {
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                        )
                                     }
                                 }
                             }

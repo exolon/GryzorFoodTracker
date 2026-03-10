@@ -59,8 +59,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,7 +69,10 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-fun parseVoiceInput(spokenText: String, defaultTime: String): Triple<String, String, String> {
+fun parseVoiceInput(
+    spokenText: String,
+    defaultTime: String
+): Triple<String, String, String> {
     val lower = spokenText.lowercase()
     val type = when {
         "breakfast" in lower -> "Breakfast"
@@ -82,7 +83,10 @@ fun parseVoiceInput(spokenText: String, defaultTime: String): Triple<String, Str
     }
 
     var parsedTime = defaultTime
-    val timeRegex = Regex("\\b([1-9]|1[0-2])(?:[:.]([0-5][0-9]))?\\s*(am|pm)\\b", RegexOption.IGNORE_CASE)
+    val timeRegex = Regex(
+        pattern = "\\b([1-9]|1[0-2])(?:[:.]([0-5][0-9]))?\\s*(am|pm)\\b",
+        option = RegexOption.IGNORE_CASE
+    )
     val match = timeRegex.find(lower)
 
     if (match != null) {
@@ -90,8 +94,14 @@ fun parseVoiceInput(spokenText: String, defaultTime: String): Triple<String, Str
         val minStr = match.groups[2]?.value ?: "00"
         val ampm = match.groups[3]?.value?.lowercase() ?: "am"
         var hour = hourStr.toInt()
-        if (ampm == "pm" && hour < 12) hour += 12
-        if (ampm == "am" && hour == 12) hour = 0
+
+        if (ampm == "pm" && hour < 12) {
+            hour += 12
+        }
+        if (ampm == "am" && hour == 12) {
+            hour = 0
+        }
+
         parsedTime = String.format("%02d:%02d", hour, minStr.toInt())
     }
 
@@ -122,10 +132,6 @@ fun FoodTrackerScreen(
     var duplicatingMeal by remember { mutableStateOf<MealEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // --- V4.3 MORNING INTENT PROTOCOL STATE ---
-    var showMorningIntent by remember { mutableStateOf(false) }
-    var hasPromptedIntent by rememberSaveable { mutableStateOf(false) }
-
     var initialDialogMealType by remember { mutableStateOf<String?>("Lunch") }
     var initialDialogTime by remember { mutableStateOf<String?>(null) }
     var initialDialogDesc by remember { mutableStateOf<String?>(null) }
@@ -134,7 +140,10 @@ fun FoodTrackerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val initialPage = Int.MAX_VALUE / 2
-    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { Int.MAX_VALUE })
+    val pagerState = rememberPagerState(
+        initialPage = initialPage,
+        pageCount = { Int.MAX_VALUE }
+    )
 
     val currentBackStackEntry = navController.currentBackStackEntry
     val targetDateStr by currentBackStackEntry?.savedStateHandle?.getStateFlow<String?>("targetDate", null)?.collectAsState() ?: remember { mutableStateOf(null) }
@@ -179,26 +188,13 @@ fun FoodTrackerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // --- V4.3 MORNING INTENT TRIGGER ---
-    LaunchedEffect(currentDate) {
-        if (currentDate == LocalDate.now() && !hasPromptedIntent) {
-            // Wait a brief moment for smooth UX and to ensure DB stream is ready
-            delay(300)
-            val tags = dao.getTagsForDate(currentDate.toString()).first()
-            if (tags == null || tags.tags.isBlank()) {
-                showMorningIntent = true
-            }
-            hasPromptedIntent = true
-        }
-    }
-
     val speechRecognizerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
             val spokenText = data?.get(0) ?: ""
             val (parsedType, parsedTime, parsedDesc) = parseVoiceInput(
-                spokenText,
-                LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                spokenText = spokenText,
+                defaultTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
             )
             initialDialogMealType = parsedType
             initialDialogTime = parsedTime
@@ -236,16 +232,19 @@ fun FoodTrackerScreen(
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(currentDate) {
         entrance.snapTo(0f)
-        entrance.animateTo(1f, animationSpec = spring(dampingRatio = 0.8f, stiffness = 120f))
+        entrance.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.8f, stiffness = 120f)
+        )
     }
 
     val appScale by animateFloatAsState(
-        targetValue = if (showAddDialog || showMorningIntent) 0.94f else 1f,
+        targetValue = if (showAddDialog) 0.94f else 1f,
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "scale"
     )
     val appBlur by animateDpAsState(
-        targetValue = if (showAddDialog || showMorningIntent) 16.dp else 0.dp,
+        targetValue = if (showAddDialog) 16.dp else 0.dp,
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "blur"
     )
@@ -264,14 +263,16 @@ fun FoodTrackerScreen(
                 .scale(appScale)
                 .graphicsLayer {
                     clip = true
-                    shape = RoundedCornerShape(if (showAddDialog || showMorningIntent) 32.dp else 0.dp)
+                    shape = RoundedCornerShape(if (showAddDialog) 32.dp else 0.dp)
                 }
                 .blur(
                     radius = appBlur,
                     edgeTreatment = BlurredEdgeTreatment.Unbounded
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState)
+            },
             topBar = {
                 LargeDayHeader(
                     date = currentDate,
@@ -284,16 +285,35 @@ fun FoodTrackerScreen(
                         coroutineScope.launch(Dispatchers.IO) {
                             val cleaned = headerTagsList.filter { !it.startsWith("Friction:") }
                             val newTags = if (newF > 0) cleaned + "Friction: $newF" else cleaned
-                            dao.insertTags(DailyTagEntity(currentDate.toString(), newTags.joinToString(",")))
+                            dao.insertTags(
+                                DailyTagEntity(
+                                    date = currentDate.toString(),
+                                    tags = newTags.joinToString(",")
+                                )
+                            )
                             MacroWidget().updateAll(context)
                         }
                     },
                     scrollBehavior = scrollBehavior,
-                    onBehaviorClick = { navController.navigate("behavior") },
-                    onAnalyticsClick = { navController.navigate("analytics") },
-                    onSettingsClick = { navController.navigate("settings") },
-                    onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
-                    onNext = { coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                    onBehaviorClick = {
+                        navController.navigate("behavior")
+                    },
+                    onAnalyticsClick = {
+                        navController.navigate("analytics")
+                    },
+                    onSettingsClick = {
+                        navController.navigate("settings")
+                    },
+                    onPrev = {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                        }
+                    },
+                    onNext = {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
+                    },
                     onCopy = {
                         copyToClipboard(
                             context = context,
@@ -323,7 +343,9 @@ fun FoodTrackerScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     FloatingActionButton(
                         onClick = {
@@ -400,7 +422,11 @@ fun FoodTrackerScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(Unit) {
-                            detectTapGestures(onTap = { focusManager.clearFocus() })
+                            detectTapGestures(
+                                onTap = {
+                                    focusManager.clearFocus()
+                                }
+                            )
                         }
                 ) {
                     if (availableTags.isNotEmpty()) {
@@ -423,11 +449,18 @@ fun FoodTrackerScreen(
                                             val newVisuals = if (isSelected) cleaned.filter { it != tag } else cleaned + tag
                                             val newTags = if (currentFrictionTag != null) newVisuals + currentFrictionTag else newVisuals
 
-                                            dao.insertTags(DailyTagEntity(pageDate, newTags.joinToString(",")))
+                                            dao.insertTags(
+                                                DailyTagEntity(
+                                                    date = pageDate,
+                                                    tags = newTags.joinToString(",")
+                                                )
+                                            )
                                             MacroWidget().updateAll(context)
                                         }
                                     },
-                                    label = { Text(tag) },
+                                    label = {
+                                        Text(text = tag)
+                                    },
                                     shape = RoundedCornerShape(16.dp)
                                 )
                             }
@@ -449,7 +482,9 @@ fun FoodTrackerScreen(
                         )
 
                         if (pageEntries.isEmpty()) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                                 Text(
                                     text = "The day is clear.",
                                     style = MaterialTheme.typography.headlineSmall,
@@ -472,7 +507,10 @@ fun FoodTrackerScreen(
                                     bottom = 100.dp
                                 )
                             ) {
-                                itemsIndexed(items = pageEntries, key = { _, item -> item.id }) { index, entry ->
+                                itemsIndexed(
+                                    items = pageEntries,
+                                    key = { _, item -> item.id }
+                                ) { index, entry ->
                                     Box(
                                         modifier = Modifier
                                             .animateItem()
@@ -501,11 +539,13 @@ fun FoodTrackerScreen(
                                                         dao.deleteMeal(entry)
                                                         MacroWidget().updateAll(context)
                                                     }
+
                                                     val result = snackbarHostState.showSnackbar(
                                                         message = "${entry.type} deleted",
                                                         actionLabel = "UNDO",
                                                         duration = SnackbarDuration.Short
                                                     )
+
                                                     if (result == SnackbarResult.ActionPerformed) {
                                                         withContext(Dispatchers.IO) {
                                                             dao.insertMeal(entry)
@@ -533,7 +573,10 @@ fun FoodTrackerScreen(
                                             .padding(top = 16.dp),
                                         shape = RoundedCornerShape(24.dp),
                                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
+                                        )
                                     ) {
                                         Column(
                                             modifier = Modifier
@@ -545,14 +588,18 @@ fun FoodTrackerScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
                                                     Icon(
                                                         imageVector = Icons.Filled.AutoAwesome,
                                                         contentDescription = null,
                                                         tint = MaterialTheme.colorScheme.secondary,
                                                         modifier = Modifier.size(20.dp)
                                                     )
-                                                    Spacer(Modifier.width(8.dp))
+                                                    Spacer(
+                                                        modifier = Modifier.width(8.dp)
+                                                    )
                                                     Text(
                                                         text = "Daily Summary & AI",
                                                         style = MaterialTheme.typography.labelLarge,
@@ -573,7 +620,9 @@ fun FoodTrackerScreen(
                                                         tint = MaterialTheme.colorScheme.outline,
                                                         modifier = Modifier.size(16.dp)
                                                     )
-                                                    Spacer(Modifier.width(4.dp))
+                                                    Spacer(
+                                                        modifier = Modifier.width(4.dp)
+                                                    )
                                                     Text(
                                                         text = "Fast: $fastingDuration",
                                                         style = MaterialTheme.typography.labelMedium,
@@ -591,7 +640,9 @@ fun FoodTrackerScreen(
                                                 )
                                             }
 
-                                            Spacer(Modifier.height(12.dp))
+                                            Spacer(
+                                                modifier = Modifier.height(12.dp)
+                                            )
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -602,11 +653,19 @@ fun FoodTrackerScreen(
                                                     onValueChange = {
                                                         totalKcal = it
                                                         coroutineScope.launch(Dispatchers.IO) {
-                                                            dao.insertMetric(DailyMetricEntity(pageDate, it, deficit))
+                                                            dao.insertMetric(
+                                                                DailyMetricEntity(
+                                                                    date = pageDate,
+                                                                    totalKcal = it,
+                                                                    deficit = deficit
+                                                                )
+                                                            )
                                                             MacroWidget().updateAll(context)
                                                         }
                                                     },
-                                                    label = { Text("Total Kcal") },
+                                                    label = {
+                                                        Text(text = "Total Kcal")
+                                                    },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -618,16 +677,25 @@ fun FoodTrackerScreen(
                                                         focusedBorderColor = MaterialTheme.colorScheme.secondary
                                                     )
                                                 )
+
                                                 OutlinedTextField(
                                                     value = deficit,
                                                     onValueChange = {
                                                         deficit = it
                                                         coroutineScope.launch(Dispatchers.IO) {
-                                                            dao.insertMetric(DailyMetricEntity(pageDate, totalKcal, it))
+                                                            dao.insertMetric(
+                                                                DailyMetricEntity(
+                                                                    date = pageDate,
+                                                                    totalKcal = totalKcal,
+                                                                    deficit = it
+                                                                )
+                                                            )
                                                             MacroWidget().updateAll(context)
                                                         }
                                                     },
-                                                    label = { Text("Deficit") },
+                                                    label = {
+                                                        Text(text = "Deficit")
+                                                    },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -641,7 +709,9 @@ fun FoodTrackerScreen(
                                                 )
                                             }
 
-                                            Spacer(Modifier.height(12.dp))
+                                            Spacer(
+                                                modifier = Modifier.height(12.dp)
+                                            )
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -652,10 +722,18 @@ fun FoodTrackerScreen(
                                                     onValueChange = {
                                                         inputWeight = it
                                                         coroutineScope.launch(Dispatchers.IO) {
-                                                            dao.insertMeasurement(MeasurementEntity(pageDate, it, inputFat))
+                                                            dao.insertMeasurement(
+                                                                MeasurementEntity(
+                                                                    date = pageDate,
+                                                                    weight = it,
+                                                                    bodyFat = inputFat
+                                                                )
+                                                            )
                                                         }
                                                     },
-                                                    label = { Text("Weight (kg)") },
+                                                    label = {
+                                                        Text(text = "Weight (kg)")
+                                                    },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -667,15 +745,24 @@ fun FoodTrackerScreen(
                                                         focusedBorderColor = MaterialTheme.colorScheme.secondary
                                                     )
                                                 )
+
                                                 OutlinedTextField(
                                                     value = inputFat,
                                                     onValueChange = {
                                                         inputFat = it
                                                         coroutineScope.launch(Dispatchers.IO) {
-                                                            dao.insertMeasurement(MeasurementEntity(pageDate, inputWeight, it))
+                                                            dao.insertMeasurement(
+                                                                MeasurementEntity(
+                                                                    date = pageDate,
+                                                                    weight = inputWeight,
+                                                                    bodyFat = it
+                                                                )
+                                                            )
                                                         }
                                                     },
-                                                    label = { Text("Body Fat (%)") },
+                                                    label = {
+                                                        Text(text = "Body Fat (%)")
+                                                    },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -689,14 +776,21 @@ fun FoodTrackerScreen(
                                                 )
                                             }
 
-                                            Spacer(Modifier.height(12.dp))
+                                            Spacer(
+                                                modifier = Modifier.height(12.dp)
+                                            )
 
                                             OutlinedTextField(
                                                 value = insightText,
                                                 onValueChange = {
                                                     insightText = it
                                                     coroutineScope.launch(Dispatchers.IO) {
-                                                        dao.insertInsight(DailyInsightEntity(pageDate, it))
+                                                        dao.insertInsight(
+                                                            DailyInsightEntity(
+                                                                date = pageDate,
+                                                                insight = it
+                                                            )
+                                                        )
                                                     }
                                                 },
                                                 placeholder = {
@@ -707,8 +801,12 @@ fun FoodTrackerScreen(
                                                 },
                                                 modifier = Modifier.fillMaxWidth(),
                                                 textStyle = MaterialTheme.typography.bodyLarge,
-                                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                                keyboardOptions = KeyboardOptions(
+                                                    imeAction = ImeAction.Done
+                                                ),
+                                                keyboardActions = KeyboardActions(
+                                                    onDone = { focusManager.clearFocus() }
+                                                ),
                                                 colors = OutlinedTextFieldDefaults.colors(
                                                     unfocusedBorderColor = Color.Transparent,
                                                     focusedBorderColor = MaterialTheme.colorScheme.secondary
@@ -723,8 +821,14 @@ fun FoodTrackerScreen(
                                                     horizontalArrangement = Arrangement.End
                                                 ) {
                                                     TextButton(
-                                                        onClick = { focusManager.clearFocus() },
-                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                                        onClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                            focusManager.clearFocus()
+                                                        },
+                                                        contentPadding = PaddingValues(
+                                                            horizontal = 12.dp,
+                                                            vertical = 4.dp
+                                                        )
                                                     ) {
                                                         Text(
                                                             text = "OK",
@@ -744,7 +848,6 @@ fun FoodTrackerScreen(
             }
         }
 
-        // --- ADD MEAL DIALOG ---
         AnimatedVisibility(
             visible = showAddDialog,
             enter = scaleIn(
@@ -763,10 +866,18 @@ fun FoodTrackerScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.4f))
-                    .pointerInput(Unit) { detectTapGestures { showAddDialog = false } },
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            showAddDialog = false
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier.pointerInput(Unit) { detectTapGestures {} }) {
+                Box(
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures {}
+                    }
+                ) {
                     AddMealDialog(
                         existingMeal = editingMeal ?: duplicatingMeal,
                         initialType = initialDialogMealType,
@@ -789,9 +900,23 @@ fun FoodTrackerScreen(
                         onSave = { timeNow, selectedType, text ->
                             coroutineScope.launch(Dispatchers.IO) {
                                 if (editingMeal != null) {
-                                    dao.updateMeal(editingMeal!!.copy(time = timeNow, type = selectedType, description = text))
+                                    dao.updateMeal(
+                                        editingMeal!!.copy(
+                                            time = timeNow,
+                                            type = selectedType,
+                                            description = text
+                                        )
+                                    )
                                 } else {
-                                    dao.insertMeal(MealEntity(UUID.randomUUID().toString(), currentDate.toString(), timeNow, selectedType, text))
+                                    dao.insertMeal(
+                                        MealEntity(
+                                            id = UUID.randomUUID().toString(),
+                                            date = currentDate.toString(),
+                                            time = timeNow,
+                                            type = selectedType,
+                                            description = text
+                                        )
+                                    )
                                 }
                                 MacroWidget().updateAll(context)
                             }
@@ -799,39 +924,6 @@ fun FoodTrackerScreen(
                         }
                     )
                 }
-            }
-        }
-
-        // --- MORNING INTENT DIALOG ---
-        AnimatedVisibility(
-            visible = showMorningIntent,
-            enter = scaleIn(
-                initialScale = 0.8f,
-                animationSpec = tween(400, easing = FastOutSlowInEasing)
-            ) + fadeIn(tween(400)),
-            exit = scaleOut(
-                targetScale = 0.8f,
-                animationSpec = tween(300, easing = FastOutSlowInEasing)
-            ) + fadeOut(tween(300)),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .pointerInput(Unit) { detectTapGestures {} },
-                contentAlignment = Alignment.Center
-            ) {
-                MorningIntentDialog(
-                    onDismiss = { showMorningIntent = false },
-                    onSave = { tagsToSave ->
-                        coroutineScope.launch(Dispatchers.IO) {
-                            dao.insertTags(DailyTagEntity(currentDate.toString(), tagsToSave))
-                            MacroWidget().updateAll(context)
-                        }
-                        showMorningIntent = false
-                    }
-                )
             }
         }
     }
@@ -882,6 +974,11 @@ fun copyToClipboard(
         textToCopy.append("| ${it.time} | ${it.type} | ${it.description.replace("|", "")} |\n")
     }
 
-    clipboard.setPrimaryClip(ClipData.newPlainText("Food Log", textToCopy.toString()))
+    clipboard.setPrimaryClip(
+        ClipData.newPlainText(
+            "Food Log",
+            textToCopy.toString()
+        )
+    )
     Toast.makeText(context, "Copied for Analysis", Toast.LENGTH_SHORT).show()
 }
