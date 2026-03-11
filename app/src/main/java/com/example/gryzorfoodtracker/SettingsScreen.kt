@@ -57,8 +57,8 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.random.Random
 
-// Add this if it isn't in your central keys file
 val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
+val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target") // V4.8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +82,10 @@ fun SettingsScreen(
 
     val targetWeightStr by context.dataStore.data
         .map { it[TARGET_WEIGHT_KEY] ?: "" }
+        .collectAsState("")
+
+    val fastingTargetStr by context.dataStore.data
+        .map { it[FASTING_TARGET_KEY] ?: "" }
         .collectAsState("")
 
     val customTags by context.dataStore.data
@@ -168,13 +172,11 @@ fun SettingsScreen(
         }
     }
 
-    // --- DIRECTORY PICKER LAUNCHER FOR AUTO-BACKUP ---
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
-                // Grant persistent permissions so we can write here silently in the future
                 context.contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -194,12 +196,8 @@ fun SettingsScreen(
                 dismissOnBackPress = false,
                 dismissOnClickOutside = false
             ),
-            title = {
-                Text(text = "Import Successful")
-            },
-            text = {
-                Text(text = "The database has been restored. The app must restart to apply the changes safely.")
-            },
+            title = { Text(text = "Import Successful") },
+            text = { Text(text = "The database has been restored. The app must restart to apply the changes safely.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -209,9 +207,7 @@ fun SettingsScreen(
                         context.startActivity(intent)
                         Runtime.getRuntime().exit(0)
                     }
-                ) {
-                    Text(text = "Restart App")
-                }
+                ) { Text(text = "Restart App") }
             }
         )
     }
@@ -222,9 +218,7 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = {
-                Text(text = "App Manual")
-            },
+            title = { Text(text = "App Manual") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     item {
@@ -237,9 +231,7 @@ fun SettingsScreen(
                             text = "• Voice Input: Hold the Mic button, say 'Snack, an apple at 4 pm', and let the AI parse the rest.\n• Gestures: Swipe a meal left to delete. Swipe right to instantly duplicate it.\n• Long-Press: Hold down a suggested meal chip to banish typos from your history.",
                             style = MaterialTheme.typography.bodyMedium
                         )
-
                         Spacer(modifier = Modifier.height(12.dp))
-
                         Text(
                             text = "The Context Layer",
                             fontWeight = FontWeight.Bold,
@@ -249,9 +241,7 @@ fun SettingsScreen(
                             text = "• Tags: Use the chip bar to flag daily conditions.\n• Morning Intent: Empty days display a dashboard to set your daily Cognitive Load and Sleep Score before logging food.",
                             style = MaterialTheme.typography.bodyMedium
                         )
-
                         Spacer(modifier = Modifier.height(12.dp))
-
                         Text(
                             text = "Behavioral Engine",
                             fontWeight = FontWeight.Bold,
@@ -270,9 +260,7 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showManual = false
                     }
-                ) {
-                    Text(text = "Close")
-                }
+                ) { Text(text = "Close") }
             }
         )
     }
@@ -283,12 +271,11 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showChangelog = false
             },
-            title = {
-                Text(text = "Version History")
-            },
+            title = { Text(text = "Version History") },
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips (Deltas). Added optional Fasting Target gamification to the Daily UI.",
                         "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine. Built OTA GitHub updater with Auto-Backup directory linking.",
                         "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
                         "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math. Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard.",
@@ -320,9 +307,7 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showChangelog = false
                     }
-                ) {
-                    Text(text = "Close")
-                }
+                ) { Text(text = "Close") }
             }
         )
     }
@@ -448,20 +433,39 @@ fun SettingsScreen(
                         )
                     }
 
-                    OutlinedTextField(
-                        value = targetWeightStr,
-                        onValueChange = { newVal ->
-                            coroutineScope.launch {
-                                context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal }
-                            }
-                        },
-                        label = { Text(text = "Target Body Weight (kg)") },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = targetWeightStr,
+                            onValueChange = { newVal ->
+                                coroutineScope.launch {
+                                    context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal }
+                                }
+                            },
+                            label = { Text(text = "Target Weight (kg)") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+
+                        OutlinedTextField(
+                            value = fastingTargetStr,
+                            onValueChange = { newVal ->
+                                coroutineScope.launch {
+                                    context.dataStore.edit { it[FASTING_TARGET_KEY] = newVal }
+                                }
+                            },
+                            label = { Text(text = "Fast Target (hrs)") },
+                            placeholder = { Text(text = "Optional") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
 
                     Row(
                         modifier = Modifier
@@ -653,7 +657,6 @@ fun SettingsScreen(
                         )
                     }
 
-                    // Auto-Backup Path Setter
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -727,7 +730,6 @@ fun SettingsScreen(
                         )
                     }
 
-                    // --- V4.7 SEED DEBUG DATA BUTTON ---
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -850,7 +852,6 @@ fun SettingsScreen(
                         )
                     }
 
-                    // --- V4.7 OTA UPDATER (WITH AUTO-BACKUP & AUTO-INSTALL) ---
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -879,8 +880,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            // Validate version using simple integer comparison
-                                            val currentVersion = "v4.7"
+                                            val currentVersion = "v4.8"
                                             val latestVal = latestTag.replace("v", "").replace(".", "").toIntOrNull() ?: 0
                                             val currentVal = currentVersion.replace("v", "").replace(".", "").toIntOrNull() ?: 0
 
@@ -897,17 +897,13 @@ fun SettingsScreen(
                                                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                                                 val downloadId = downloadManager.enqueue(request)
 
-                                                // Register broadcast receiver to backup and auto-install when download finishes
                                                 val onComplete = object : BroadcastReceiver() {
                                                     override fun onReceive(ctxt: Context, intent: Intent) {
                                                         val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                                                         if (id == downloadId) {
-
-                                                            // --- FIX: Capture the BroadcastReceiver reference before entering the coroutine
                                                             val currentReceiver = this
 
                                                             coroutineScope.launch(Dispatchers.IO) {
-                                                                // 1. PERFORM SILENT AUTO-BACKUP IF DIRECTORY IS SET
                                                                 val savedUriStr = context.dataStore.data.first()[AUTO_BACKUP_URI_KEY]
                                                                 if (!savedUriStr.isNullOrBlank()) {
                                                                     try {
@@ -943,7 +939,6 @@ fun SettingsScreen(
                                                                     }
                                                                 }
 
-                                                                // 2. FIRE THE APK INSTALL INTENT
                                                                 val installIntent = Intent(Intent.ACTION_VIEW).apply {
                                                                     val fileUri = FileProvider.getUriForFile(
                                                                         ctxt,
@@ -955,15 +950,12 @@ fun SettingsScreen(
                                                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                                                 }
                                                                 context.startActivity(installIntent)
-
-                                                                // 3. FIX: Unregister using the captured reference
                                                                 context.unregisterReceiver(currentReceiver)
                                                             }
                                                         }
                                                     }
                                                 }
 
-// Register the receiver
                                                 context.registerReceiver(
                                                     onComplete,
                                                     IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
@@ -1014,7 +1006,6 @@ fun SettingsScreen(
                 }
             }
 
-            // --- APP VERSION FOOTER ---
             item {
                 Column(
                     modifier = Modifier
@@ -1028,7 +1019,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.7",
+                        text = "v4.8",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

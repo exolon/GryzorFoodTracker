@@ -177,6 +177,9 @@ fun FoodTrackerScreen(
     val availableTags by context.dataStore.data.map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }.collectAsState(DEFAULT_TAGS)
     val bannedSuggestions by context.dataStore.data.map { it[BANNED_SUGGESTIONS_KEY] ?: emptySet() }.collectAsState(emptySet())
 
+    // V4.8 FASTING TARGET
+    val fastingTargetStr by context.dataStore.data.map { it[FASTING_TARGET_KEY] ?: "" }.collectAsState("")
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -361,9 +364,7 @@ fun FoodTrackerScreen(
                         )
                     }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     FloatingActionButton(
                         onClick = {
@@ -441,9 +442,7 @@ fun FoodTrackerScreen(
                         .fillMaxSize()
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                onTap = {
-                                    focusManager.clearFocus()
-                                }
+                                onTap = { focusManager.clearFocus() }
                             )
                         }
                 ) {
@@ -483,9 +482,7 @@ fun FoodTrackerScreen(
                                             MacroWidget().updateAll(context)
                                         }
                                     },
-                                    label = {
-                                        Text(text = tag)
-                                    },
+                                    label = { Text(text = tag) },
                                     shape = RoundedCornerShape(16.dp)
                                 )
                             }
@@ -525,9 +522,7 @@ fun FoodTrackerScreen(
                                         tint = MaterialTheme.colorScheme.primary
                                     )
 
-                                    Spacer(
-                                        modifier = Modifier.height(16.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
 
                                     Text(
                                         text = "Morning Intent",
@@ -543,9 +538,7 @@ fun FoodTrackerScreen(
                                         textAlign = TextAlign.Center
                                     )
 
-                                    Spacer(
-                                        modifier = Modifier.height(32.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(32.dp))
 
                                     Text(
                                         text = "Cognitive Load",
@@ -554,9 +547,7 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.align(Alignment.Start)
                                     )
 
-                                    Spacer(
-                                        modifier = Modifier.height(8.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
                                     val currentFriction = activeTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
@@ -581,17 +572,13 @@ fun FoodTrackerScreen(
                                                         MacroWidget().updateAll(context)
                                                     }
                                                 },
-                                                label = {
-                                                    Text(text = level.toString())
-                                                },
+                                                label = { Text(text = level.toString()) },
                                                 shape = CircleShape
                                             )
                                         }
                                     }
 
-                                    Spacer(
-                                        modifier = Modifier.height(24.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(24.dp))
 
                                     Text(
                                         text = "Sleep Quality",
@@ -600,9 +587,7 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.align(Alignment.Start)
                                     )
 
-                                    Spacer(
-                                        modifier = Modifier.height(8.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
                                     val currentSleep = activeTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
@@ -627,17 +612,13 @@ fun FoodTrackerScreen(
                                                         MacroWidget().updateAll(context)
                                                     }
                                                 },
-                                                label = {
-                                                    Text(text = level.toString())
-                                                },
+                                                label = { Text(text = level.toString()) },
                                                 shape = CircleShape
                                             )
                                         }
                                     }
 
-                                    Spacer(
-                                        modifier = Modifier.height(24.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(24.dp))
 
                                     Text(
                                         text = "Context Tags",
@@ -646,9 +627,7 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.align(Alignment.Start)
                                     )
 
-                                    Spacer(
-                                        modifier = Modifier.height(8.dp)
-                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
                                     FlowRow(
                                         modifier = Modifier.fillMaxWidth(),
@@ -683,9 +662,7 @@ fun FoodTrackerScreen(
                                                         MacroWidget().updateAll(context)
                                                     }
                                                 },
-                                                label = {
-                                                    Text(text = tag)
-                                                },
+                                                label = { Text(text = tag) },
                                                 shape = RoundedCornerShape(16.dp)
                                             )
                                         }
@@ -792,18 +769,14 @@ fun FoodTrackerScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(
                                                         imageVector = Icons.Filled.AutoAwesome,
                                                         contentDescription = null,
                                                         tint = MaterialTheme.colorScheme.secondary,
                                                         modifier = Modifier.size(20.dp)
                                                     )
-                                                    Spacer(
-                                                        modifier = Modifier.width(8.dp)
-                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
                                                     Text(
                                                         text = "Daily Summary & AI",
                                                         style = MaterialTheme.typography.labelLarge,
@@ -811,6 +784,7 @@ fun FoodTrackerScreen(
                                                     )
                                                 }
 
+                                                // --- V4.8 FASTING TARGET UI ---
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.clickable {
@@ -818,41 +792,47 @@ fun FoodTrackerScreen(
                                                         showFastTooltip = !showFastTooltip
                                                     }
                                                 ) {
+                                                    var isFastMet = false
+                                                    val targetHours = fastingTargetStr.toIntOrNull()
+                                                    if (targetHours != null && fastingDuration != "--") {
+                                                        val hrs = fastingDuration.substringBefore("h").trim().toIntOrNull() ?: 0
+                                                        if (hrs >= targetHours) isFastMet = true
+                                                    }
+
+                                                    val fastColor = if (isFastMet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                                    val fastIcon = if (isFastMet) Icons.Filled.CheckCircle else Icons.Filled.Timer
+
                                                     Icon(
-                                                        imageVector = Icons.Filled.Timer,
+                                                        imageVector = fastIcon,
                                                         contentDescription = null,
-                                                        tint = MaterialTheme.colorScheme.outline,
+                                                        tint = fastColor,
                                                         modifier = Modifier.size(16.dp)
                                                     )
-                                                    Spacer(
-                                                        modifier = Modifier.width(4.dp)
-                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
                                                     Text(
                                                         text = "Fast: $fastingDuration",
                                                         style = MaterialTheme.typography.labelMedium,
-                                                        color = MaterialTheme.colorScheme.outline
+                                                        color = fastColor,
+                                                        fontWeight = if (isFastMet) FontWeight.Bold else FontWeight.Normal
                                                     )
                                                 }
                                             }
 
                                             AnimatedVisibility(visible = showFastTooltip) {
                                                 Text(
-                                                    text = "Calculation: Measures the time elapsed between your final meal logged yesterday and your first meal logged today.",
+                                                    text = "Measures time between yesterday's final meal and today's first. Target: ${if (fastingTargetStr.isBlank()) "None set" else "$fastingTargetStr hrs"}.",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.outline,
                                                     modifier = Modifier.padding(top = 8.dp)
                                                 )
                                             }
 
-                                            Spacer(
-                                                modifier = Modifier.height(12.dp)
-                                            )
+                                            Spacer(modifier = Modifier.height(12.dp))
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
-                                                // --- V4.7 TEXT UPDATE ---
                                                 OutlinedTextField(
                                                     value = totalKcal,
                                                     onValueChange = {
@@ -868,9 +848,7 @@ fun FoodTrackerScreen(
                                                             MacroWidget().updateAll(context)
                                                         }
                                                     },
-                                                    label = {
-                                                        Text(text = "Total Intake")
-                                                    },
+                                                    label = { Text(text = "Total Intake") },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -898,9 +876,7 @@ fun FoodTrackerScreen(
                                                             MacroWidget().updateAll(context)
                                                         }
                                                     },
-                                                    label = {
-                                                        Text(text = "Deficit")
-                                                    },
+                                                    label = { Text(text = "Deficit") },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -914,9 +890,7 @@ fun FoodTrackerScreen(
                                                 )
                                             }
 
-                                            Spacer(
-                                                modifier = Modifier.height(12.dp)
-                                            )
+                                            Spacer(modifier = Modifier.height(12.dp))
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -936,9 +910,7 @@ fun FoodTrackerScreen(
                                                             )
                                                         }
                                                     },
-                                                    label = {
-                                                        Text(text = "Weight (kg)")
-                                                    },
+                                                    label = { Text(text = "Weight (kg)") },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -965,9 +937,7 @@ fun FoodTrackerScreen(
                                                             )
                                                         }
                                                     },
-                                                    label = {
-                                                        Text(text = "Body Fat (%)")
-                                                    },
+                                                    label = { Text(text = "Body Fat (%)") },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
@@ -981,9 +951,7 @@ fun FoodTrackerScreen(
                                                 )
                                             }
 
-                                            Spacer(
-                                                modifier = Modifier.height(12.dp)
-                                            )
+                                            Spacer(modifier = Modifier.height(12.dp))
 
                                             OutlinedTextField(
                                                 value = insightText,
@@ -1078,11 +1046,7 @@ fun FoodTrackerScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.pointerInput(Unit) {
-                        detectTapGestures {}
-                    }
-                ) {
+                Box(modifier = Modifier.pointerInput(Unit) { detectTapGestures {} }) {
                     AddMealDialog(
                         existingMeal = editingMeal ?: duplicatingMeal,
                         initialType = initialDialogMealType,
@@ -1153,15 +1117,12 @@ fun copyToClipboard(
 
     textToCopy.append("**${date.format(DateTimeFormatter.ofPattern("EEE, MMM dd, yyyy"))}**\n\n")
 
-    if (!tags.isNullOrBlank()) {
-        textToCopy.append("**Context Tags:** $tags\n\n")
-    }
+    if (!tags.isNullOrBlank()) { textToCopy.append("**Context Tags:** $tags\n\n") }
 
     if (comp != null && (comp.weight.isNotBlank() || comp.bodyFat.isNotBlank())) {
         textToCopy.append("**Body Comp:** ${comp.weight}kg | ${comp.bodyFat}%\n")
     }
 
-    // --- V4.7 TEXT UPDATE ---
     if (metrics != null && (metrics.totalKcal.isNotBlank() || metrics.deficit.isNotBlank())) {
         textToCopy.append("**Macros:** Intake: ${metrics.totalKcal} | Deficit: ${metrics.deficit}\n")
     }
@@ -1171,20 +1132,13 @@ fun copyToClipboard(
         textToCopy.append("\n")
     }
 
-    if (!insight.isNullOrBlank()) {
-        textToCopy.append("**AI Insight:**\n$insight\n\n")
-    }
+    if (!insight.isNullOrBlank()) { textToCopy.append("**AI Insight:**\n$insight\n\n") }
 
     textToCopy.append("| Time | Type | Description |\n| :--- | :--- | :--- |\n")
     entries.forEach {
         textToCopy.append("| ${it.time} | ${it.type} | ${it.description.replace("|", "")} |\n")
     }
 
-    clipboard.setPrimaryClip(
-        ClipData.newPlainText(
-            "Food Log",
-            textToCopy.toString()
-        )
-    )
+    clipboard.setPrimaryClip(ClipData.newPlainText("Food Log", textToCopy.toString()))
     Toast.makeText(context, "Copied for Analysis", Toast.LENGTH_SHORT).show()
 }

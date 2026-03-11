@@ -9,8 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -56,6 +55,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 data class TagStat(
     val tag: String,
@@ -267,9 +267,7 @@ fun AnalyticsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(text = "Analytics Dashboard")
-                },
+                title = { Text(text = "Analytics Dashboard") },
                 navigationIcon = {
                     IconButton(
                         onClick = {
@@ -318,21 +316,13 @@ fun AnalyticsScreen(
 
             // --- 1. TOP METRIC CARDS ---
             item {
-                Column(
-                    modifier = elasticMod(0)
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Column(modifier = elasticMod(0).fillMaxWidth().padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Velocity & Trajectory",
                             style = MaterialTheme.typography.labelLarge
                         )
-                        Spacer(
-                            modifier = Modifier.width(8.dp)
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -367,13 +357,9 @@ fun AnalyticsScreen(
                         }
                     }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
@@ -388,11 +374,7 @@ fun AnalyticsScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                             )
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .background(auraBrush)
-                                    .padding(16.dp)
-                            ) {
+                            Box(modifier = Modifier.background(auraBrush).padding(16.dp)) {
                                 Column {
                                     Text(
                                         text = "7-Day Avg Intake",
@@ -433,11 +415,7 @@ fun AnalyticsScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                             )
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .background(auraBrush)
-                                    .padding(16.dp)
-                            ) {
+                            Box(modifier = Modifier.background(auraBrush).padding(16.dp)) {
                                 Column {
                                     Text(
                                         text = if (phasePreference == "bulk") "7-Day Avg Surplus" else "7-Day Avg Deficit",
@@ -475,21 +453,13 @@ fun AnalyticsScreen(
             item {
                 val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
 
-                Column(
-                    modifier = elasticMod(1)
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Column(modifier = elasticMod(1).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Consistency Heatmap",
                             style = MaterialTheme.typography.labelLarge
                         )
-                        Spacer(
-                            modifier = Modifier.width(8.dp)
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -529,9 +499,7 @@ fun AnalyticsScreen(
                         }
                     }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -543,9 +511,7 @@ fun AnalyticsScreen(
                         )
                     ) {
                         FlowRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -579,7 +545,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 3. MACRO TREND GRAPH (31-DAY OVERLAY) ---
+            // --- 3. MACRO TREND GRAPH (V4.8 HAPTIC SCRUB & RELATIVE DELTAS) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -605,28 +571,21 @@ fun AnalyticsScreen(
                 )
 
                 var tappedMacro by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
-                var showSignalOverlay by remember { mutableStateOf(false) } // V4.7 OVERLAY TOGGLE
+                var showSignalOverlay by remember { mutableStateOf(false) }
+                var lastMacroHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(
-                    modifier = elasticMod(2)
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
-                ) {
+                Column(modifier = elasticMod(2).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "31-Day Macro Trend",
                                 style = MaterialTheme.typography.labelLarge
                             )
-                            Spacer(
-                                modifier = Modifier.width(8.dp)
-                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -686,7 +645,7 @@ fun AnalyticsScreen(
                     }
 
                     Text(
-                        text = "Shaded = 'Grind'. Primary = Intake, Red = Deficit.",
+                        text = "Drag to scrub. Primary = Intake, Red = Def.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(top = 4.dp)
@@ -699,7 +658,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Interactive vector graph. Toggling 'Signal' overlays a smooth Trailing 7-Day Average line on top of your raw daily data, cutting through daily volatility to reveal your true trajectory.",
+                                text = "Interactive vector graph. Drag your finger to scrub. Tooltips calculate the delta against the previous day's value to highlight local momentum.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -707,11 +666,8 @@ fun AnalyticsScreen(
                         }
                     }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Data class to hold both raw and average for a single day
                     data class MacroNode(
                         val date: String,
                         val rawKcal: Float?,
@@ -750,47 +706,75 @@ fun AnalyticsScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp)
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(macroNodes) {
-                                        detectTapGestures { tapOffset ->
-                                            val stepX = size.width / 30f
-                                            val paddingBottom = 40f
-                                            val graphHeight = size.height - paddingBottom
+                                    .pointerInput(macroNodes, showSignalOverlay) {
+                                        awaitEachGesture {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val isPressed = event.changes.any { it.pressed }
+                                                if (isPressed) {
+                                                    val position = event.changes.first().position
+                                                    val stepX = size.width / 30f
+                                                    val paddingBottom = 40f
+                                                    val graphHeight = size.height - paddingBottom
 
-                                            val allK = macroNodes.mapNotNull { it.rawKcal } + macroNodes.mapNotNull { it.avgKcal }
-                                            val allD = macroNodes.mapNotNull { it.rawDef } + macroNodes.mapNotNull { it.avgDef }
+                                                    val allK = macroNodes.mapNotNull { it.rawKcal } + macroNodes.mapNotNull { it.avgKcal }
+                                                    val allD = macroNodes.mapNotNull { it.rawDef } + macroNodes.mapNotNull { it.avgDef }
 
-                                            val maxKcal = allK.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
-                                            val minDeficit = allD.minOrNull()?.coerceAtMost(0f) ?: -500f
-                                            val totalRange = maxKcal - minDeficit
+                                                    val maxKcal = allK.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
+                                                    val minDeficit = allD.minOrNull()?.coerceAtMost(0f) ?: -500f
+                                                    val totalRange = maxKcal - minDeficit
 
-                                            val points = mutableListOf<Triple<Offset, String, Color>>()
+                                                    // Map X to nearest day index
+                                                    val cIndex = (position.x / stepX).roundToInt().coerceIn(0, 30)
 
-                                            macroNodes.forEachIndexed { index, node ->
-                                                val x = index * stepX
-                                                val kcalToUse = if (showSignalOverlay && node.avgKcal != null) node.avgKcal else node.rawKcal
-                                                if (kcalToUse != null) {
-                                                    points.add(Triple(Offset(x, graphHeight - ((kcalToUse - minDeficit) / totalRange) * graphHeight), "${kcalToUse.toInt()} In", primaryColor))
+                                                    // Haptic Tick
+                                                    if (cIndex != lastMacroHapticIndex) {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        lastMacroHapticIndex = cIndex
+                                                    }
+
+                                                    val node = macroNodes[cIndex]
+                                                    val prevNode = if (cIndex > 0) macroNodes[cIndex - 1] else null
+                                                    val xPos = cIndex * stepX
+
+                                                    // Calculate potential snap points for this specific day
+                                                    val yPoints = mutableListOf<Triple<Offset, String, Color>>()
+
+                                                    val kcalToUse = if (showSignalOverlay && node.avgKcal != null) node.avgKcal else node.rawKcal
+                                                    val prevKcal = if (showSignalOverlay && prevNode?.avgKcal != null) prevNode.avgKcal else prevNode?.rawKcal
+
+                                                    if (kcalToUse != null) {
+                                                        val deltaStr = if (prevKcal != null) {
+                                                            val d = kcalToUse - prevKcal
+                                                            val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
+                                                            " ($sign ${abs(d).toInt()})"
+                                                        } else ""
+                                                        yPoints.add(Triple(Offset(xPos, graphHeight - ((kcalToUse - minDeficit) / totalRange) * graphHeight), "${kcalToUse.toInt()} In$deltaStr", primaryColor))
+                                                    }
+
+                                                    val defToUse = if (showSignalOverlay && node.avgDef != null) node.avgDef else node.rawDef
+                                                    val prevDef = if (showSignalOverlay && prevNode?.avgDef != null) prevNode.avgDef else prevNode?.rawDef
+
+                                                    if (defToUse != null) {
+                                                        val deltaStr = if (prevDef != null) {
+                                                            val d = defToUse - prevDef
+                                                            val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
+                                                            " ($sign ${abs(d).toInt()})"
+                                                        } else ""
+                                                        yPoints.add(Triple(Offset(xPos, graphHeight - ((defToUse - minDeficit) / totalRange) * graphHeight), "${defToUse.toInt()} Def$deltaStr", errorColor))
+                                                    }
+
+                                                    // Snap to the closest Y
+                                                    tappedMacro = yPoints.minByOrNull { abs(it.first.y - position.y) }
+                                                    event.changes.first().consume()
+                                                } else {
+                                                    tappedMacro = null
+                                                    lastMacroHapticIndex = -1
                                                 }
-                                                val defToUse = if (showSignalOverlay && node.avgDef != null) node.avgDef else node.rawDef
-                                                if (defToUse != null) {
-                                                    points.add(Triple(Offset(x, graphHeight - ((defToUse - minDeficit) / totalRange) * graphHeight), "${defToUse.toInt()} Def", errorColor))
-                                                }
-                                            }
-
-                                            val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
-                                            if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
-                                                tappedMacro = closest
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            } else {
-                                                tappedMacro = null
                                             }
                                         }
                                     }
@@ -804,10 +788,8 @@ fun AnalyticsScreen(
 
                                 val maxKcal = allK.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
                                 val minKcal = allK.minOrNull() ?: 0f
-
                                 val minDeficit = allD.minOrNull()?.coerceAtMost(0f) ?: -500f
                                 val maxDeficit = allD.maxOrNull() ?: 0f
-
                                 val totalRange = maxKcal - minDeficit
 
                                 macroNodes.forEachIndexed { index, node ->
@@ -876,7 +858,6 @@ fun AnalyticsScreen(
                                 val rawDefPath = Path()
                                 val avgKcalPath = Path()
                                 val avgDefPath = Path()
-
                                 val rawKcalArea = Path()
                                 val rawDefArea = Path()
 
@@ -884,14 +865,11 @@ fun AnalyticsScreen(
                                 var firstRawD = true
                                 var firstAvgK = true
                                 var firstAvgD = true
-
                                 var lastRawKX = 0f
                                 var lastRawDX = 0f
 
                                 macroNodes.forEachIndexed { index, node ->
                                     val x = index * stepX
-
-                                    // RAW PLOTTING
                                     if (node.rawKcal != null) {
                                         val y = zeroY + ((graphHeight - ((node.rawKcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
                                         lastRawKX = x
@@ -922,70 +900,37 @@ fun AnalyticsScreen(
                                         drawCircle(color = errorColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
 
-                                    // AVERAGE PLOTTING
                                     if (node.avgKcal != null) {
                                         val y = zeroY + ((graphHeight - ((node.avgKcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
-                                        if (firstAvgK) {
-                                            avgKcalPath.moveTo(x, y)
-                                            firstAvgK = false
-                                        } else {
-                                            avgKcalPath.lineTo(x, y)
-                                        }
+                                        if (firstAvgK) { avgKcalPath.moveTo(x, y); firstAvgK = false }
+                                        else { avgKcalPath.lineTo(x, y) }
                                     }
 
                                     if (node.avgDef != null) {
                                         val y = zeroY + ((graphHeight - ((node.avgDef - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
-                                        if (firstAvgD) {
-                                            avgDefPath.moveTo(x, y)
-                                            firstAvgD = false
-                                        } else {
-                                            avgDefPath.lineTo(x, y)
-                                        }
+                                        if (firstAvgD) { avgDefPath.moveTo(x, y); firstAvgD = false }
+                                        else { avgDefPath.lineTo(x, y) }
                                     }
                                 }
 
                                 if (!firstRawK) {
                                     rawKcalArea.lineTo(lastRawKX, graphHeight)
                                     rawKcalArea.close()
-                                    drawPath(
-                                        path = rawKcalArea,
-                                        brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)
-                                    )
+                                    drawPath(path = rawKcalArea, brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight))
                                 }
 
                                 if (!firstRawD) {
                                     rawDefArea.lineTo(lastRawDX, zeroY)
                                     rawDefArea.close()
-                                    drawPath(
-                                        path = rawDefArea,
-                                        brush = Brush.verticalGradient(colors = listOf(errorColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)
-                                    )
+                                    drawPath(path = rawDefArea, brush = Brush.verticalGradient(colors = listOf(errorColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight))
                                 }
 
-                                // Draw Raw Lines
-                                drawPath(
-                                    path = rawKcalPath,
-                                    color = primaryColor.copy(alpha = animProgress.value),
-                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
-                                )
-                                drawPath(
-                                    path = rawDefPath,
-                                    color = errorColor.copy(alpha = animProgress.value),
-                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
-                                )
+                                drawPath(path = rawKcalPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
+                                drawPath(path = rawDefPath, color = errorColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
 
-                                // Draw Signal Overlay (Lighter, no dots, thicker)
                                 if (showSignalOverlay) {
-                                    drawPath(
-                                        path = avgKcalPath,
-                                        color = primaryColor.copy(alpha = 0.5f * animProgress.value),
-                                        style = Stroke(width = 8f, cap = StrokeCap.Round)
-                                    )
-                                    drawPath(
-                                        path = avgDefPath,
-                                        color = errorColor.copy(alpha = 0.5f * animProgress.value),
-                                        style = Stroke(width = 8f, cap = StrokeCap.Round)
-                                    )
+                                    drawPath(path = avgKcalPath, color = primaryColor.copy(alpha = 0.6f * animProgress.value), style = Stroke(width = 5f, cap = StrokeCap.Round))
+                                    drawPath(path = avgDefPath, color = errorColor.copy(alpha = 0.6f * animProgress.value), style = Stroke(width = 5f, cap = StrokeCap.Round))
                                 }
 
                                 tappedMacro?.let { (offset, text, color) ->
@@ -998,16 +943,8 @@ fun AnalyticsScreen(
                                     var tY = offset.y - tHeight - 16f
                                     if (tY < 0f) tY = offset.y + 16f
 
-                                    drawRoundRect(
-                                        color = color,
-                                        topLeft = Offset(tX, tY),
-                                        size = Size(tWidth, tHeight),
-                                        cornerRadius = CornerRadius(12f, 12f)
-                                    )
-                                    drawText(
-                                        textLayoutResult = textLayout,
-                                        topLeft = Offset(tX + 12f, tY + 8f)
-                                    )
+                                    drawRoundRect(color = color, topLeft = Offset(tX, tY), size = Size(tWidth, tHeight), cornerRadius = CornerRadius(12f, 12f))
+                                    drawText(textLayoutResult = textLayout, topLeft = Offset(tX + 12f, tY + 8f))
                                 }
                             }
                         }
@@ -1015,7 +952,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 4. BODY COMP TREND GRAPH (31-DAY) ---
+            // --- 4. BODY COMP TREND GRAPH (V4.8 HAPTIC SCRUB & DELTAS) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1039,23 +976,17 @@ fun AnalyticsScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
-                var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
 
-                Column(
-                    modifier = elasticMod(3)
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
+                var lastCompHapticIndex by remember { mutableIntStateOf(-1) }
+
+                Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Body Composition Trend",
                             style = MaterialTheme.typography.labelLarge
                         )
-                        Spacer(
-                            modifier = Modifier.width(8.dp)
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -1075,7 +1006,7 @@ fun AnalyticsScreen(
                         }
                     }
                     Text(
-                        text = "31-Day View. Primary = Weight, Sec = Fat.",
+                        text = "Drag to scrub. Dynamic vertical scale.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -1087,16 +1018,31 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Clamped interactive vector graph spanning 31 days. Outliers outside the specified bounds (66-85kg) will clip at the edges to preserve visual fidelity of incremental daily changes.",
+                                text = "Interactive drag-to-scrub vector graph spanning 31 days. The vertical axes automatically scale to the absolute minimum and maximum values present in your monthly data.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
                     }
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val dynamicBounds = remember(last31Days, allMeasurements) {
+                        val wList = last31Days.mapNotNull { d -> allMeasurements.find { it.date == d }?.weight?.toFloatOrNull() }
+                        val fList = last31Days.mapNotNull { d -> allMeasurements.find { it.date == d }?.bodyFat?.toFloatOrNull() }
+
+                        val wMaxRaw = wList.maxOrNull() ?: 85f
+                        val wMinRaw = wList.minOrNull() ?: 66f
+                        val fMaxRaw = fList.maxOrNull() ?: 25f
+                        val fMinRaw = fList.minOrNull() ?: 10f
+
+                        val wMax = if (wMaxRaw == wMinRaw) wMaxRaw + 1f else wMaxRaw
+                        val wMin = if (wMaxRaw == wMinRaw) wMinRaw - 1f else wMinRaw
+                        val fMax = if (fMaxRaw == fMinRaw) fMaxRaw + 1f else fMaxRaw
+                        val fMin = if (fMaxRaw == fMinRaw) fMinRaw - 1f else fMinRaw
+
+                        listOf(wMax, wMin, fMax, fMin)
+                    }
 
                     Surface(
                         modifier = Modifier
@@ -1109,42 +1055,73 @@ fun AnalyticsScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp)
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(allMeasurements) {
-                                        detectTapGestures { tapOffset ->
-                                            val stepX = size.width / 30f // 31 items = 30 intervals
-                                            val paddingBottom = 40f
-                                            val graphHeight = size.height - paddingBottom
-                                            val maxWeight = 85f
-                                            val minWeight = 66f
-                                            val rangeW = maxWeight - minWeight
-                                            val maxFat = 25f
-                                            val minFat = 10f
-                                            val rangeF = maxFat - minFat
+                                    .pointerInput(allMeasurements, dynamicBounds) {
+                                        awaitEachGesture {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val isPressed = event.changes.any { it.pressed }
+                                                if (isPressed) {
+                                                    val position = event.changes.first().position
+                                                    val stepX = size.width / 30f
+                                                    val paddingBottom = 40f
+                                                    val graphHeight = size.height - paddingBottom
 
-                                            val points = mutableListOf<Triple<Offset, String, Color>>()
-                                            last31Days.forEachIndexed { index, date ->
-                                                val measure = allMeasurements.find { it.date == date }
-                                                val x = index * stepX
-                                                val w = measure?.weight?.toFloatOrNull()
-                                                if (w != null) points.add(Triple(Offset(x, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg", primaryColor))
-                                                val f = measure?.bodyFat?.toFloatOrNull()
-                                                if (f != null) points.add(Triple(Offset(x, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%", secColor))
-                                            }
+                                                    val maxWeight = dynamicBounds[0]
+                                                    val minWeight = dynamicBounds[1]
+                                                    val maxFat = dynamicBounds[2]
+                                                    val minFat = dynamicBounds[3]
 
-                                            val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
-                                            if (closest != null && (closest.first - tapOffset).getDistance() < 60f) {
-                                                tappedComp = closest
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            } else {
-                                                tappedComp = null
+                                                    val rangeW = maxWeight - minWeight
+                                                    val rangeF = maxFat - minFat
+
+                                                    val cIndex = (position.x / stepX).roundToInt().coerceIn(0, 30)
+
+                                                    if (cIndex != lastCompHapticIndex) {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        lastCompHapticIndex = cIndex
+                                                    }
+
+                                                    val date = last31Days[cIndex]
+                                                    val prevDate = if (cIndex > 0) last31Days[cIndex - 1] else null
+
+                                                    val measure = allMeasurements.find { it.date == date }
+                                                    val prevMeasure = if (prevDate != null) allMeasurements.find { it.date == prevDate } else null
+
+                                                    val xPos = cIndex * stepX
+                                                    val yPoints = mutableListOf<Triple<Offset, String, Color>>()
+
+                                                    val w = measure?.weight?.toFloatOrNull()
+                                                    val pW = prevMeasure?.weight?.toFloatOrNull()
+                                                    if (w != null) {
+                                                        val deltaStr = if (pW != null) {
+                                                            val d = w - pW
+                                                            val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
+                                                            " ($sign ${String.format("%.1f", abs(d))})"
+                                                        } else ""
+                                                        yPoints.add(Triple(Offset(xPos, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg$deltaStr", primaryColor))
+                                                    }
+
+                                                    val f = measure?.bodyFat?.toFloatOrNull()
+                                                    val pF = prevMeasure?.bodyFat?.toFloatOrNull()
+                                                    if (f != null) {
+                                                        val deltaStr = if (pF != null) {
+                                                            val d = f - pF
+                                                            val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
+                                                            " ($sign ${String.format("%.1f", abs(d))})"
+                                                        } else ""
+                                                        yPoints.add(Triple(Offset(xPos, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%$deltaStr", secColor))
+                                                    }
+
+                                                    tappedComp = yPoints.minByOrNull { abs(it.first.y - position.y) }
+                                                    event.changes.first().consume()
+                                                } else {
+                                                    tappedComp = null
+                                                    lastCompHapticIndex = -1
+                                                }
                                             }
                                         }
                                     }
@@ -1153,37 +1130,33 @@ fun AnalyticsScreen(
                                 val paddingBottom = 40f
                                 val graphHeight = size.height - paddingBottom
                                 val startY = graphHeight
-                                val maxWeight = 85f
-                                val minWeight = 66f
+
+                                val maxWeight = dynamicBounds[0]
+                                val minWeight = dynamicBounds[1]
+                                val maxFat = dynamicBounds[2]
+                                val minFat = dynamicBounds[3]
+
                                 val rangeW = maxWeight - minWeight
-                                val maxFat = 25f
-                                val minFat = 10f
                                 val rangeF = maxFat - minFat
 
                                 if (animProgress.value > 0.8f) {
-                                    val maxWLabel = textMeasurer.measure("${maxWeight.toInt()}kg", axisStyleW)
-                                    drawText(
-                                        textLayoutResult = maxWLabel,
-                                        topLeft = Offset(0f, 0f)
-                                    )
+                                    val wFormat = if (maxWeight % 1 == 0f) maxWeight.toInt().toString() else maxWeight.toString()
+                                    val wMinFormat = if (minWeight % 1 == 0f) minWeight.toInt().toString() else minWeight.toString()
 
-                                    val minWLabel = textMeasurer.measure("${minWeight.toInt()}kg", axisStyleW)
-                                    drawText(
-                                        textLayoutResult = minWLabel,
-                                        topLeft = Offset(0f, graphHeight - minWLabel.size.height)
-                                    )
+                                    val maxWLabel = textMeasurer.measure("${wFormat}kg", axisStyleW)
+                                    drawText(textLayoutResult = maxWLabel, topLeft = Offset(0f, 0f))
 
-                                    val maxFLabel = textMeasurer.measure("${maxFat.toInt()}%", axisStyleF)
-                                    drawText(
-                                        textLayoutResult = maxFLabel,
-                                        topLeft = Offset(size.width - maxFLabel.size.width, 0f)
-                                    )
+                                    val minWLabel = textMeasurer.measure("${wMinFormat}kg", axisStyleW)
+                                    drawText(textLayoutResult = minWLabel, topLeft = Offset(0f, graphHeight - minWLabel.size.height))
 
-                                    val minFLabel = textMeasurer.measure("${minFat.toInt()}%", axisStyleF)
-                                    drawText(
-                                        textLayoutResult = minFLabel,
-                                        topLeft = Offset(size.width - minFLabel.size.width, graphHeight - minFLabel.size.height)
-                                    )
+                                    val fFormat = if (maxFat % 1 == 0f) maxFat.toInt().toString() else maxFat.toString()
+                                    val fMinFormat = if (minFat % 1 == 0f) minFat.toInt().toString() else minFat.toString()
+
+                                    val maxFLabel = textMeasurer.measure("${fFormat}%", axisStyleF)
+                                    drawText(textLayoutResult = maxFLabel, topLeft = Offset(size.width - maxFLabel.size.width, 0f))
+
+                                    val minFLabel = textMeasurer.measure("${fMinFormat}%", axisStyleF)
+                                    drawText(textLayoutResult = minFLabel, topLeft = Offset(size.width - minFLabel.size.width, graphHeight - minFLabel.size.height))
                                 }
 
                                 val wPath = Path()
@@ -1198,10 +1171,7 @@ fun AnalyticsScreen(
                                 last31Days.forEachIndexed { index, date ->
                                     if (index % 6 == 0 || index == 30) {
                                         val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
-                                        drawText(
-                                            textLayoutResult = layoutResult,
-                                            topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f)
-                                        )
+                                        drawText(textLayoutResult = layoutResult, topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f))
                                     }
 
                                     val measure = allMeasurements.find { it.date == date }
@@ -1211,15 +1181,8 @@ fun AnalyticsScreen(
                                     if (w != null) {
                                         val y = startY + ((graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight) - startY) * animProgress.value
                                         lastWX = x
-                                        if (firstW) {
-                                            wPath.moveTo(x, y)
-                                            wAreaPath.moveTo(x, graphHeight)
-                                            wAreaPath.lineTo(x, y)
-                                            firstW = false
-                                        } else {
-                                            wPath.lineTo(x, y)
-                                            wAreaPath.lineTo(x, y)
-                                        }
+                                        if (firstW) { wPath.moveTo(x, y); wAreaPath.moveTo(x, graphHeight); wAreaPath.lineTo(x, y); firstW = false }
+                                        else { wPath.lineTo(x, y); wAreaPath.lineTo(x, y) }
                                         drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
 
@@ -1227,15 +1190,8 @@ fun AnalyticsScreen(
                                     if (f != null) {
                                         val y = startY + ((graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight) - startY) * animProgress.value
                                         lastFX = x
-                                        if (firstF) {
-                                            fPath.moveTo(x, y)
-                                            fAreaPath.moveTo(x, graphHeight)
-                                            fAreaPath.lineTo(x, y)
-                                            firstF = false
-                                        } else {
-                                            fPath.lineTo(x, y)
-                                            fAreaPath.lineTo(x, y)
-                                        }
+                                        if (firstF) { fPath.moveTo(x, y); fAreaPath.moveTo(x, graphHeight); fAreaPath.lineTo(x, y); firstF = false }
+                                        else { fPath.lineTo(x, y); fAreaPath.lineTo(x, y) }
                                         drawCircle(color = secColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
                                 }
@@ -1243,31 +1199,17 @@ fun AnalyticsScreen(
                                 if (!firstW) {
                                     wAreaPath.lineTo(lastWX, graphHeight)
                                     wAreaPath.close()
-                                    drawPath(
-                                        path = wAreaPath,
-                                        brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)
-                                    )
+                                    drawPath(path = wAreaPath, brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight))
                                 }
 
                                 if (!firstF) {
                                     fAreaPath.lineTo(lastFX, graphHeight)
                                     fAreaPath.close()
-                                    drawPath(
-                                        path = fAreaPath,
-                                        brush = Brush.verticalGradient(colors = listOf(secColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)
-                                    )
+                                    drawPath(path = fAreaPath, brush = Brush.verticalGradient(colors = listOf(secColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight))
                                 }
 
-                                drawPath(
-                                    path = wPath,
-                                    color = primaryColor.copy(alpha = animProgress.value),
-                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
-                                )
-                                drawPath(
-                                    path = fPath,
-                                    color = secColor.copy(alpha = animProgress.value),
-                                    style = Stroke(width = 4f, cap = StrokeCap.Round)
-                                )
+                                drawPath(path = wPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
+                                drawPath(path = fPath, color = secColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
 
                                 tappedComp?.let { (offset, text, color) ->
                                     val textLayout = textMeasurer.measure(text, tooltipStyle)
@@ -1279,16 +1221,8 @@ fun AnalyticsScreen(
                                     var tY = offset.y - tHeight - 16f
                                     if (tY < 0f) tY = offset.y + 16f
 
-                                    drawRoundRect(
-                                        color = color,
-                                        topLeft = Offset(tX, tY),
-                                        size = Size(tWidth, tHeight),
-                                        cornerRadius = CornerRadius(12f, 12f)
-                                    )
-                                    drawText(
-                                        textLayoutResult = textLayout,
-                                        topLeft = Offset(tX + 12f, tY + 8f)
-                                    )
+                                    drawRoundRect(color = color, topLeft = Offset(tX, tY), size = Size(tWidth, tHeight), cornerRadius = CornerRadius(12f, 12f))
+                                    drawText(textLayoutResult = textLayout, topLeft = Offset(tX + 12f, tY + 8f))
                                 }
                             }
                         }
@@ -1301,21 +1235,13 @@ fun AnalyticsScreen(
                 var showTooltip by remember { mutableStateOf(false) }
 
                 if (tagStats.isNotEmpty()) {
-                    Column(
-                        modifier = elasticMod(4)
-                            .fillMaxWidth()
-                            .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Behavioral Compliance Matrix",
                                 style = MaterialTheme.typography.labelLarge
                             )
-                            Spacer(
-                                modifier = Modifier.width(8.dp)
-                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -1351,9 +1277,7 @@ fun AnalyticsScreen(
                             }
                         }
 
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -1364,22 +1288,14 @@ fun AnalyticsScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                                 tagStats.forEachIndexed { index, stat ->
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column(
-                                            modifier = Modifier.weight(1f)
-                                        ) {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = stat.tag,
                                                 style = MaterialTheme.typography.bodyLarge,
@@ -1393,9 +1309,7 @@ fun AnalyticsScreen(
                                             )
                                         }
 
-                                        Column(
-                                            horizontalAlignment = Alignment.End
-                                        ) {
+                                        Column(horizontalAlignment = Alignment.End) {
                                             val rateColor = if (stat.winRate >= 70) MaterialTheme.colorScheme.primary else if (stat.winRate >= 40) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
 
                                             Text(
@@ -1413,9 +1327,7 @@ fun AnalyticsScreen(
                                     }
 
                                     if (index < tagStats.size - 1) {
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                                        )
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                                     }
                                 }
                             }
