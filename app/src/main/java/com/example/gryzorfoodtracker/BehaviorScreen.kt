@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Hotel
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.PriceCheck
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.SsidChart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingFlat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +43,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,6 +65,10 @@ fun BehaviorScreen(
         .map { it[TARGET_WEIGHT_KEY] ?: "" }
         .collectAsState(initial = "")
 
+    val customTags by context.dataStore.data
+        .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
+        .collectAsState(initial = DEFAULT_TAGS)
+
     val allMetrics by dao.getAllMetrics().collectAsState(initial = emptyList())
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
     val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
@@ -74,17 +81,17 @@ fun BehaviorScreen(
     }
 
     val vixScore = remember(last14Days, allMetrics) {
-        val kcals = allMetrics.filter {
+        val intakes = allMetrics.filter {
             last14Days.contains(it.date)
         }.mapNotNull {
             it.totalKcal.toDoubleOrNull()
         }
 
-        if (kcals.size < 2) {
+        if (intakes.size < 2) {
             0
         } else {
-            val mean = kcals.average()
-            val variance = kcals.map { (it - mean).pow(2) }.average()
+            val mean = intakes.average()
+            val variance = intakes.map { (it - mean).pow(2) }.average()
             sqrt(variance).toInt()
         }
     }
@@ -113,7 +120,30 @@ fun BehaviorScreen(
         }
     }
 
-    // --- V4.6 SLEEP PENALTY FOR BURNOUT ---
+    // --- V4.7 WEEKLY P&L LOGIC ---
+    val weeklyPnL = remember(today, allMetrics, allMeasurements, phasePreference) {
+        val last7Days = (6 downTo 0).map { today.minusDays(it.toLong()).toString() }
+        val defSum = allMetrics.filter { last7Days.contains(it.date) }.sumOf { it.deficit.toDoubleOrNull() ?: 0.0 }
+
+        // 7700 kcal per kg of fat
+        val expectedDelta = defSum / 7700.0
+
+        val measures = allMeasurements.filter { last7Days.contains(it.date) }
+            .mapNotNull { m -> m.weight.toDoubleOrNull()?.let { LocalDate.parse(m.date) to it } }
+            .sortedBy { it.first }
+
+        val actualDelta = if (measures.size >= 2) {
+            val firstW = measures.first().second
+            val lastW = measures.last().second
+            // Positive value means weight was lost, Negative means gained
+            firstW - lastW
+        } else {
+            null
+        }
+
+        Pair(expectedDelta, actualDelta)
+    }
+
     val burnoutRisk = remember(daysReversed, allMetrics, allTags, vixScore, phasePreference) {
         if (phasePreference == "bulk") {
             0
@@ -138,7 +168,6 @@ fun BehaviorScreen(
             if (avgStreakDef > 600) risk += 15
             if (vixScore > 300) risk += 15
 
-            // Check most recently logged sleep score
             var recentSleep = 0
             for (date in daysReversed) {
                 val tags = allTags.find { it.date == date }?.tags ?: ""
@@ -207,7 +236,57 @@ fun BehaviorScreen(
         }
     }
 
-    // --- V4.6 WILLPOWER TAX (REPLACES FRICTION EGO DEPLETION) ---
+    // --- V4.7 SUCCESS BLUEPRINT ---
+    val successBlueprint = remember(today, allMetrics, allTags, phasePreference, customTags) {
+        val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+        val winDays = last30Days.filter { d ->
+            val def = allMetrics.find { it.date == d }?.deficit?.toDoubleOrNull() ?: 0.0
+            if (phasePreference == "bulk") def < 0 else def > 0
+        }
+
+        if (winDays.isEmpty()) {
+            "Insufficient Data"
+        } else {
+            var sleepSum = 0
+            var sleepCount = 0
+            var loadSum = 0
+            var loadCount = 0
+            val tagFreq = mutableMapOf<String, Int>()
+
+            winDays.forEach { d ->
+                val tStr = allTags.find { it.date == d }?.tags ?: ""
+                val tList = tStr.split(",").map { it.trim() }.filter { it.isNotBlank() }
+
+                val sleep = tList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull()
+                if (sleep != null && sleep > 0) {
+                    sleepSum += sleep
+                    sleepCount++
+                }
+
+                val load = tList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull()
+                if (load != null && load > 0) {
+                    loadSum += load
+                    loadCount++
+                }
+
+                tList.filter { !it.startsWith("Friction:") && !it.startsWith("Sleep:") && customTags.contains(it) }.forEach {
+                    tagFreq[it] = tagFreq.getOrDefault(it, 0) + 1
+                }
+            }
+
+            val avgSleep = if (sleepCount > 0) (sleepSum.toFloat() / sleepCount).roundToInt() else 0
+            val avgLoad = if (loadCount > 0) (loadSum.toFloat() / loadCount).roundToInt() else 0
+            val topTag = tagFreq.maxByOrNull { it.value }?.key
+
+            val parts = mutableListOf<String>()
+            if (avgLoad > 0) parts.add("Load $avgLoad")
+            if (avgSleep > 0) parts.add("Sleep $avgSleep")
+            if (topTag != null) parts.add("[$topTag]")
+
+            if (parts.isEmpty()) "Consistent Baseline" else parts.joinToString(" + ")
+        }
+    }
+
     val willpowerTax = remember(last14Days, allMetrics, allTags, phasePreference) {
         var poorSleepDays = 0
         var poorSleepWins = 0
@@ -238,7 +317,6 @@ fun BehaviorScreen(
         Pair(goodRate, poorRate)
     }
 
-    // --- V4.6 RECOVERY DEBT SLEEP MULTIPLIER ---
     val recoveryDebt = remember(last14Days, allTags) {
         var grind = 0.0
         var restAndRecovery = 0
@@ -321,6 +399,8 @@ fun BehaviorScreen(
     var showWillpowerTooltip by remember { mutableStateOf(false) }
     var showRecoveryTooltip by remember { mutableStateOf(false) }
     var showVelocityTooltip by remember { mutableStateOf(false) }
+    var showPnlTooltip by remember { mutableStateOf(false) }
+    var showBlueprintTooltip by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -567,7 +647,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showVixTooltip) {
                                     Text(
-                                        text = "Calculation: Standard Deviation (σ) of daily calories over 14 days.\n1. Mean (μ) = Avg daily calories.\n2. Variance = Avg of squared differences from the Mean.\n3. VIX = Square root of Variance.\nHigh volatility (>300) indicates erratic eating patterns.",
+                                        text = "Calculation: Standard Deviation (σ) of daily intake over 14 days. High volatility (>300) indicates erratic eating patterns and metabolic stress.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -580,7 +660,7 @@ fun BehaviorScreen(
 
                                 val vixColor = if (vixScore > 300) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                 Text(
-                                    text = "Caloric VIX",
+                                    text = "Intake VIX",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -677,6 +757,147 @@ fun BehaviorScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    // --- V4.7 WEEKLY P&L CARD ---
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Calculate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(
+                                        modifier = Modifier.width(12.dp)
+                                    )
+                                    Text(
+                                        text = "Weekly P&L",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            showPnlTooltip = !showPnlTooltip
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.QuestionMark,
+                                        contentDescription = "Info",
+                                        modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            AnimatedVisibility(visible = showPnlTooltip) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.padding(start = 0.dp, top = 12.dp, end = 0.dp, bottom = 0.dp)
+                                ) {
+                                    Text(
+                                        text = "Calculation: Sums your net caloric deficit over the strict 7-day trailing window and divides by 7,700 kcal to calculate theoretical fat delta. Compares this mathematically against your actual scale change to validate your TDEE assumption.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(
+                                modifier = Modifier.height(16.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "Theoretical Delta",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+
+                                    val expectedStr = String.format("%.2f kg", weeklyPnL.first)
+                                    val prefixE = if (weeklyPnL.first > 0) "-" else if (weeklyPnL.first < 0) "+" else ""
+
+                                    Text(
+                                        text = "$prefixE${abs(weeklyPnL.first).let { String.format("%.2f", it) }} kg",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                Spacer(
+                                    modifier = Modifier.width(16.dp)
+                                )
+
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "Actual Scale Delta",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+
+                                    if (weeklyPnL.second == null) {
+                                        Text(
+                                            text = "--",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    } else {
+                                        val actStr = String.format("%.2f kg", weeklyPnL.second!!)
+                                        val prefixA = if (weeklyPnL.second!! > 0) "-" else if (weeklyPnL.second!! < 0) "+" else ""
+
+                                        val varianceColor = if (abs((weeklyPnL.first) - (weeklyPnL.second!!)) <= 0.5) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+
+                                        Text(
+                                            text = "$prefixA${abs(weeklyPnL.second!!).let { String.format("%.2f", it) }} kg",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = varianceColor
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -862,10 +1083,104 @@ fun BehaviorScreen(
                             }
                         }
                     }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    // --- V4.7 SUCCESS BLUEPRINT CARD ---
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Star,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(
+                                        modifier = Modifier.width(12.dp)
+                                    )
+                                    Text(
+                                        text = "Success Blueprint",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            showBlueprintTooltip = !showBlueprintTooltip
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.QuestionMark,
+                                        contentDescription = "Info",
+                                        modifier = Modifier.padding(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 3.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            AnimatedVisibility(visible = showBlueprintTooltip) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.padding(start = 0.dp, top = 12.dp, end = 0.dp, bottom = 0.dp)
+                                ) {
+                                    Text(
+                                        text = "Calculation: Scans your successful adherence days over the last 30 days and extracts the average Friction (Load), average Sleep Quality, and the most common Custom Tag present during successful execution.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(
+                                modifier = Modifier.height(16.dp)
+                            )
+
+                            Text(
+                                text = "Optimal Conditions",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+
+                            Text(
+                                text = successBlueprint,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
 
-            // --- SECTION 4: THE WILLPOWER TAX (V4.6) ---
+            // --- SECTION 4: THE WILLPOWER TAX ---
             item {
                 Column(
                     modifier = elasticMod(3)

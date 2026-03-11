@@ -547,7 +547,6 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.height(32.dp)
                                     )
 
-                                    // --- COGNITIVE LOAD ROW ---
                                     Text(
                                         text = "Cognitive Load",
                                         style = MaterialTheme.typography.labelLarge,
@@ -594,7 +593,6 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.height(24.dp)
                                     )
 
-                                    // --- V4.6 SLEEP SCORE ROW ---
                                     Text(
                                         text = "Sleep Quality",
                                         style = MaterialTheme.typography.labelLarge,
@@ -641,7 +639,6 @@ fun FoodTrackerScreen(
                                         modifier = Modifier.height(24.dp)
                                     )
 
-                                    // --- CONTEXT TAGS ROW ---
                                     Text(
                                         text = "Context Tags",
                                         style = MaterialTheme.typography.labelLarge,
@@ -855,6 +852,7 @@ fun FoodTrackerScreen(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
+                                                // --- V4.7 TEXT UPDATE ---
                                                 OutlinedTextField(
                                                     value = totalKcal,
                                                     onValueChange = {
@@ -871,7 +869,7 @@ fun FoodTrackerScreen(
                                                         }
                                                     },
                                                     label = {
-                                                        Text(text = "Total Kcal")
+                                                        Text(text = "Total Intake")
                                                     },
                                                     modifier = Modifier.weight(1f),
                                                     keyboardOptions = KeyboardOptions(
@@ -1163,8 +1161,9 @@ fun copyToClipboard(
         textToCopy.append("**Body Comp:** ${comp.weight}kg | ${comp.bodyFat}%\n")
     }
 
+    // --- V4.7 TEXT UPDATE ---
     if (metrics != null && (metrics.totalKcal.isNotBlank() || metrics.deficit.isNotBlank())) {
-        textToCopy.append("**Macros:** Kcal: ${metrics.totalKcal} | Deficit: ${metrics.deficit}\n")
+        textToCopy.append("**Macros:** Intake: ${metrics.totalKcal} | Deficit: ${metrics.deficit}\n")
     }
 
     if ((comp != null && (comp.weight.isNotBlank() || comp.bodyFat.isNotBlank())) ||

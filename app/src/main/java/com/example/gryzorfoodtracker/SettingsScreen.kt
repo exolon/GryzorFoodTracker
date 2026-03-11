@@ -210,7 +210,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Tags: Use the chip bar to flag daily conditions (e.g., Grind, Recovery).\n• Cognitive Load: Tap the 'Load' dropdown next to the date to log the daily stress/friction (1-5).\n• Morning Intent: Empty days now prompt you to set your load and tags before logging food.",
+                            text = "• Tags: Use the chip bar to flag daily conditions.\n• Morning Intent: Empty days display a dashboard to set your daily Cognitive Load and Sleep Score before logging food.",
                             style = MaterialTheme.typography.bodyMedium
                         )
 
@@ -224,7 +224,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks and scale.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Ego Depletion Matrix: Correlates your Cognitive Load inputs against your deficit success.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 14-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' to 'Rest' tags.",
+                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks, metabolic volatility, and compromised sleep.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Willpower Tax: Correlates your Sleep Quality against your deficit success rate.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 31-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' vs 'Rest/Recovery' tags.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -255,10 +255,11 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math (WMA Momentum, softened Burnout scale, fixed Recovery denominator). Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard into the empty day state.",
-                        "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery'. Built Self-Healing data matrix for orphaned tags.",
-                        "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio, and Long-Press Suggestion Banishment.",
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation (Burnout Meter), Caloric VIX (Metabolic Volatility), Marginal Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
+                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal toggle. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine.",
+                        "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
+                        "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math. Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard.",
+                        "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery'. Built Self-Healing data matrix.",
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Caloric VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
                     )
                     items(logs) { (version, notes) ->
                         Column(
@@ -761,7 +762,6 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
-                    // --- V4.5 GITHUB REPO LINK ---
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -802,7 +802,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.5",
+                        text = "v4.7",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

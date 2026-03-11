@@ -101,6 +101,11 @@ fun AnalyticsScreen(
         (13 downTo 0).map { today.minusDays(it.toLong()).toString() }
     }
 
+    // --- V4.7: 31-DAY HORIZON GENERATOR ---
+    val last31Days = remember(today) {
+        (30 downTo 0).map { today.minusDays(it.toLong()).toString() }
+    }
+
     val currentKcal = allMetrics.filter {
         currentWeekDates.contains(it.date)
     }.mapNotNull {
@@ -143,7 +148,7 @@ fun AnalyticsScreen(
                 .filter { tagString ->
                     tagString.isNotBlank() &&
                             !tagString.startsWith("Friction:", ignoreCase = true) &&
-                            !tagString.startsWith("Sleep:", ignoreCase = true) && // V4.6 FIX: Filter out Sleep
+                            !tagString.startsWith("Sleep:", ignoreCase = true) &&
                             customTags.contains(tagString)
                 }
 
@@ -391,8 +396,9 @@ fun AnalyticsScreen(
                                     .padding(16.dp)
                             ) {
                                 Column {
+                                    // V4.7 NOMENCLATURE UPDATE
                                     Text(
-                                        text = "7-Day Avg Kcal",
+                                        text = "7-Day Avg Intake",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -517,7 +523,6 @@ fun AnalyticsScreen(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
-                            // --- V4.5 THEME AGNOSTIC TEXT FIX ---
                             Text(
                                 text = "A visual representation of adherence over a rolling 30-day window. The Primary Theme Color indicates a successful day based on your phase (Cut/Bulk). The Error Color indicates failure, and the subdued Surface Color indicates no data.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -577,7 +582,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 3. MACRO TREND GRAPH ---
+            // --- 3. MACRO TREND GRAPH (31-DAY + SIGNAL TOGGLE) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -586,7 +591,6 @@ fun AnalyticsScreen(
                     fontSize = 9.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
-                // --- V4.5 AXIS LABEL STYLE ---
                 val axisStyleKcal = TextStyle(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -597,13 +601,15 @@ fun AnalyticsScreen(
                     fontWeight = FontWeight.Bold,
                     color = errorColor.copy(alpha = 0.8f)
                 )
-
                 val tooltipStyle = TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
+
                 var tappedMacro by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
+                // V4.7: SIGNAL TOGGLE STATE
+                var useSignalMode by remember { mutableStateOf(false) }
 
                 Column(
                     modifier = elasticMod(2)
@@ -611,37 +617,84 @@ fun AnalyticsScreen(
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "14-Day Macro Trend",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Spacer(
-                            modifier = Modifier.width(8.dp)
-                        )
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showMacroTooltip = !showMacroTooltip
-                                }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.QuestionMark,
-                                contentDescription = "Info",
-                                modifier = Modifier.padding(3.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            Text(
+                                text = "31-Day Macro Trend",
+                                style = MaterialTheme.typography.labelLarge
                             )
+                            Spacer(
+                                modifier = Modifier.width(8.dp)
+                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showMacroTooltip = !showMacroTooltip
+                                    }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.QuestionMark,
+                                    contentDescription = "Info",
+                                    modifier = Modifier.padding(3.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // V4.7: THE SIGNAL TOGGLE
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        useSignalMode = false
+                                    }
+                                    .background(if (!useSignalMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Raw",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (!useSignalMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        useSignalMode = true
+                                    }
+                                    .background(if (useSignalMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Signal",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (useSignalMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
+
                     Text(
-                        text = "Shaded = 'Grind'. Primary = Kcal, Red = Deficit.",
+                        text = "Shaded = 'Grind'. Primary = Intake, Red = Deficit.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
 
                     AnimatedVisibility(visible = showMacroTooltip) {
@@ -651,7 +704,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Interactive vector graph mapping daily totals. Tap and hold to scrub exact values. Days tagged with 'Grind' feature a vertical shaded background to correlate effort with intake.",
+                                text = "Interactive vector graph. 'Raw' displays volatile daily totals. 'Signal' dynamically recalculates every point into a Trailing 7-Day Average, flattening out noise to reveal your true metabolic baseline.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -662,6 +715,33 @@ fun AnalyticsScreen(
                     Spacer(
                         modifier = Modifier.height(12.dp)
                     )
+
+                    // V4.7: PRE-CALCULATE GRAPH POINTS BASED ON SIGNAL TOGGLE
+                    val macroPoints = remember(last31Days, allMetrics, useSignalMode) {
+                        last31Days.map { date ->
+                            if (useSignalMode) {
+                                // 7-Day Trailing Average calculation
+                                val window = (6 downTo 0).map { LocalDate.parse(date).minusDays(it.toLong()).toString() }
+                                val windowMetrics = allMetrics.filter { window.contains(it.date) }
+
+                                val k = windowMetrics.mapNotNull { it.totalKcal.toDoubleOrNull() }
+                                val d = windowMetrics.mapNotNull { it.deficit.toDoubleOrNull() }
+
+                                val avgK = if (k.isNotEmpty()) k.average().toFloat() else null
+                                val avgD = if (d.isNotEmpty()) d.average().toFloat() else null
+
+                                Triple(date, avgK, avgD)
+                            } else {
+                                // Raw daily data
+                                val metric = allMetrics.find { it.date == date }
+                                Triple(
+                                    date,
+                                    metric?.totalKcal?.toFloatOrNull(),
+                                    metric?.deficit?.toFloatOrNull()
+                                )
+                            }
+                        }
+                    }
 
                     Surface(
                         modifier = Modifier
@@ -682,24 +762,32 @@ fun AnalyticsScreen(
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(allMetrics) {
+                                    .pointerInput(macroPoints) {
                                         detectTapGestures { tapOffset ->
-                                            val stepX = size.width / 13f
+                                            val stepX = size.width / 30f // 31 days = 30 intervals
                                             val paddingBottom = 40f
                                             val graphHeight = size.height - paddingBottom
-                                            val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
-                                            val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
+
+                                            val validKs = macroPoints.mapNotNull { it.second }
+                                            val maxKcal = validKs.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
+
+                                            val validDs = macroPoints.mapNotNull { it.third }
+                                            val minDeficit = validDs.minOrNull()?.coerceAtMost(0f) ?: -500f
+
                                             val totalRange = maxKcal - minDeficit
 
                                             val points = mutableListOf<Triple<Offset, String, Color>>()
 
-                                            last14Days.forEachIndexed { index, date ->
-                                                val metric = allMetrics.find { it.date == date }
+                                            macroPoints.forEachIndexed { index, data ->
                                                 val x = index * stepX
-                                                val kcal = metric?.totalKcal?.toFloatOrNull()
-                                                if (kcal != null) points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} Kcal", primaryColor))
-                                                val deficit = metric?.deficit?.toFloatOrNull()
-                                                if (deficit != null) points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
+                                                val kcal = data.second
+                                                if (kcal != null) {
+                                                    points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} In", primaryColor))
+                                                }
+                                                val deficit = data.third
+                                                if (deficit != null) {
+                                                    points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
+                                                }
                                             }
 
                                             val closest = points.minByOrNull { (it.first - tapOffset).getDistance() }
@@ -712,15 +800,24 @@ fun AnalyticsScreen(
                                         }
                                     }
                             ) {
-                                val stepX = size.width / 13f
+                                val stepX = size.width / 30f
                                 val paddingBottom = 40f
                                 val graphHeight = size.height - paddingBottom
-                                val maxKcal = allMetrics.filter { last14Days.contains(it.date) }.maxOfOrNull { it.totalKcal.toFloatOrNull() ?: 0f }?.coerceAtLeast(2500f) ?: 2500f
-                                val minDeficit = allMetrics.filter { last14Days.contains(it.date) }.minOfOrNull { it.deficit.toFloatOrNull() ?: 0f }?.coerceAtMost(0f) ?: -500f
+
+                                val validKs = macroPoints.mapNotNull { it.second }
+                                val maxKcal = validKs.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
+                                val minKcal = validKs.minOrNull() ?: 0f
+
+                                val validDs = macroPoints.mapNotNull { it.third }
+                                val minDeficit = validDs.minOrNull()?.coerceAtMost(0f) ?: -500f
+                                val maxDeficit = validDs.maxOrNull() ?: 0f
+
                                 val totalRange = maxKcal - minDeficit
 
-                                last14Days.forEachIndexed { index, date ->
+                                macroPoints.forEachIndexed { index, data ->
+                                    val date = data.first
                                     val tagsForDate = allTags.find { it.date == date }?.tags ?: ""
+
                                     if (tagsForDate.contains("Grind", ignoreCase = true)) {
                                         drawRoundRect(
                                             color = surfaceColor.copy(alpha = animProgress.value),
@@ -729,11 +826,15 @@ fun AnalyticsScreen(
                                             cornerRadius = CornerRadius(8f, 8f)
                                         )
                                     }
-                                    val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
-                                    drawText(
-                                        textLayoutResult = layoutResult,
-                                        topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f)
-                                    )
+
+                                    // V4.7 MODULO TEXT SKIP (Prevents 31 days from overlapping)
+                                    if (index % 6 == 0 || index == 30) {
+                                        val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
+                                        drawText(
+                                            textLayoutResult = layoutResult,
+                                            topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f)
+                                        )
+                                    }
                                 }
 
                                 val zeroY = graphHeight - ((0 - minDeficit) / totalRange) * graphHeight
@@ -744,21 +845,38 @@ fun AnalyticsScreen(
                                     strokeWidth = 2f
                                 )
 
-                                // --- V4.5 AXIS LABELS RENDERING ---
-                                if (animProgress.value > 0.8f) {
-                                    val maxKcalLabel = textMeasurer.measure("${maxKcal.toInt()}", axisStyleKcal)
+                                // --- EXPLICIT AXIS LABELS ---
+                                if (animProgress.value > 0.8f && totalRange > 0) {
+                                    val maxKcalLabel = textMeasurer.measure("${maxKcal.toInt()} In", axisStyleKcal)
                                     drawText(
                                         textLayoutResult = maxKcalLabel,
                                         topLeft = Offset(0f, 0f)
                                     )
 
-                                    val minDefLabel = textMeasurer.measure("${minDeficit.toInt()}", axisStyleDef)
+                                    if (minKcal < maxKcal && minKcal > 0) {
+                                        val minKcalLabel = textMeasurer.measure("${minKcal.toInt()} In", axisStyleKcal)
+                                        val minKcalY = graphHeight - ((minKcal - minDeficit) / totalRange) * graphHeight
+                                        drawText(
+                                            textLayoutResult = minKcalLabel,
+                                            topLeft = Offset(0f, minKcalY - minKcalLabel.size.height)
+                                        )
+                                    }
+
+                                    val minDefLabel = textMeasurer.measure("${minDeficit.toInt()} Def", axisStyleDef)
                                     drawText(
                                         textLayoutResult = minDefLabel,
                                         topLeft = Offset(size.width - minDefLabel.size.width, graphHeight - minDefLabel.size.height)
                                     )
+
+                                    if (maxDeficit > minDeficit) {
+                                        val maxDefLabel = textMeasurer.measure("${maxDeficit.toInt()} Def", axisStyleDef)
+                                        val maxDefY = graphHeight - ((maxDeficit - minDeficit) / totalRange) * graphHeight
+                                        drawText(
+                                            textLayoutResult = maxDefLabel,
+                                            topLeft = Offset(size.width - maxDefLabel.size.width, maxDefY)
+                                        )
+                                    }
                                 }
-                                // ----------------------------------
 
                                 val kcalPath = Path()
                                 val deficitPath = Path()
@@ -769,11 +887,10 @@ fun AnalyticsScreen(
                                 var lastKcalX = 0f
                                 var lastDefX = 0f
 
-                                last14Days.forEachIndexed { index, date ->
-                                    val metric = allMetrics.find { it.date == date }
+                                macroPoints.forEachIndexed { index, data ->
                                     val x = index * stepX
+                                    val kcal = data.second
 
-                                    val kcal = metric?.totalKcal?.toFloatOrNull()
                                     if (kcal != null) {
                                         val y = zeroY + ((graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
                                         lastKcalX = x
@@ -789,7 +906,7 @@ fun AnalyticsScreen(
                                         drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
 
-                                    val deficit = metric?.deficit?.toFloatOrNull()
+                                    val deficit = data.third
                                     if (deficit != null) {
                                         val y = zeroY + ((graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
                                         lastDefX = x
@@ -862,7 +979,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 4. BODY COMP TREND GRAPH ---
+            // --- 4. BODY COMP TREND GRAPH (31-DAY) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -870,7 +987,6 @@ fun AnalyticsScreen(
                     fontSize = 9.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
-                // --- V4.5 AXIS LABEL STYLE ---
                 val axisStyleW = TextStyle(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -923,7 +1039,7 @@ fun AnalyticsScreen(
                         }
                     }
                     Text(
-                        text = "Primary = Weight (66-85kg), Secondary = Fat (10-25%).",
+                        text = "31-Day View. Primary = Weight, Sec = Fat.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -935,7 +1051,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Clamped interactive vector graph. Outliers outside the specified ranges will clip at the top/bottom edges to preserve the visual fidelity of incremental changes.",
+                                text = "Clamped interactive vector graph spanning 31 days. Outliers outside the specified bounds (66-85kg) will clip at the edges to preserve visual fidelity of incremental daily changes.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -967,7 +1083,7 @@ fun AnalyticsScreen(
                                     .fillMaxSize()
                                     .pointerInput(allMeasurements) {
                                         detectTapGestures { tapOffset ->
-                                            val stepX = size.width / 13f
+                                            val stepX = size.width / 30f // 31 items = 30 intervals
                                             val paddingBottom = 40f
                                             val graphHeight = size.height - paddingBottom
                                             val maxWeight = 85f
@@ -978,7 +1094,7 @@ fun AnalyticsScreen(
                                             val rangeF = maxFat - minFat
 
                                             val points = mutableListOf<Triple<Offset, String, Color>>()
-                                            last14Days.forEachIndexed { index, date ->
+                                            last31Days.forEachIndexed { index, date ->
                                                 val measure = allMeasurements.find { it.date == date }
                                                 val x = index * stepX
                                                 val w = measure?.weight?.toFloatOrNull()
@@ -997,7 +1113,7 @@ fun AnalyticsScreen(
                                         }
                                     }
                             ) {
-                                val stepX = size.width / 13f
+                                val stepX = size.width / 30f
                                 val paddingBottom = 40f
                                 val graphHeight = size.height - paddingBottom
                                 val startY = graphHeight
@@ -1008,7 +1124,6 @@ fun AnalyticsScreen(
                                 val minFat = 10f
                                 val rangeF = maxFat - minFat
 
-                                // --- V4.5 AXIS LABELS RENDERING ---
                                 if (animProgress.value > 0.8f) {
                                     val maxWLabel = textMeasurer.measure("${maxWeight.toInt()}kg", axisStyleW)
                                     drawText(
@@ -1034,7 +1149,6 @@ fun AnalyticsScreen(
                                         topLeft = Offset(size.width - minFLabel.size.width, graphHeight - minFLabel.size.height)
                                     )
                                 }
-                                // ----------------------------------
 
                                 val wPath = Path()
                                 val fPath = Path()
@@ -1045,12 +1159,15 @@ fun AnalyticsScreen(
                                 var lastWX = 0f
                                 var lastFX = 0f
 
-                                last14Days.forEachIndexed { index, date ->
-                                    val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
-                                    drawText(
-                                        textLayoutResult = layoutResult,
-                                        topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f)
-                                    )
+                                last31Days.forEachIndexed { index, date ->
+                                    // V4.7 MODULO TEXT SKIP (Prevents 31 days from overlapping)
+                                    if (index % 6 == 0 || index == 30) {
+                                        val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
+                                        drawText(
+                                            textLayoutResult = layoutResult,
+                                            topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f)
+                                        )
+                                    }
 
                                     val measure = allMeasurements.find { it.date == date }
                                     val x = index * stepX
