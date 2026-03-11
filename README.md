@@ -20,3 +20,14 @@ Weight management is a problem of cognitive bandwidth, not just mathematics. Whe
 * **UI:** 100% Jetpack Compose with responsive hardware haptic engine integration (`HapticFeedbackType.LongPress`).
 * **Persistence:** Room Database (SQL) mapped seamlessly through Flow to the UI layer, with Datastore for isolated preference states.
 * **Data Export:** Automated `.db` exports and `.pdf` Executive Summary generation.
+
+---
+
+### 🤖 AI-Assisted Development
+This application was entirely architected and coded through a continuous human-AI pair programming workflow.
+
+Acting as the Product Manager and Domain Expert, the human developer defined the behavioral economics frameworks, physiological requirements, and strict Jetpack Compose UX constraints. The AI (Google's Gemini) acted as the primary engineering partner—translating product requirements into Room SQL persistence, executing vector mathematics for the custom analytics canvases, and writing the underlying Kotlin logic.
+
+This repository serves as a functional showcase of how AI can be leveraged to rapidly prototype, iterate, and deploy highly complex, interdisciplinary software systems.
+
+In essence, I wanted a very simple food intake  tracker and I couldn't find one to fill my needs - and then the feature creep came in, like usual.
