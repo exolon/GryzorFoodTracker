@@ -299,6 +299,7 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v4.83" to "The Installer Pass: Dynamically mapped OTA file downloads to version tags to prevent stale Android DownloadManager file collisions. Switched version comparator to float evaluation to secure future major version bumps.",
                         "v4.82" to "The Split-Pane Pass: Segmented the Body Composition graph into distinct upper (Weight) and lower (Body Fat) bounds to prevent visual intersection of trend lines.",
                         "v4.81" to "The Polish Pass: Fixed DataStore async cursor jumping in Settings. Made chart tooltips sticky to avoid thumb occlusion. Added explicit suspension delay to ensure OTA backup success toast is visible before installation.",
                         "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips (Deltas). Added optional Fasting Target gamification to the Daily UI.",
@@ -908,19 +909,20 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "v4.82"
-                                            val latestVal = latestTag.replace("v", "").replace(".", "").toIntOrNull() ?: 0
-                                            val currentVal = currentVersion.replace("v", "").replace(".", "").toIntOrNull() ?: 0
+                                            val currentVersion = "v4.83"
+                                            val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
+                                            val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
                                             if (latestVal > currentVal && apkUrl != null) {
                                                 withContext(Dispatchers.Main) {
                                                     Toast.makeText(context, "Version $latestTag found! Downloading...", Toast.LENGTH_LONG).show()
                                                 }
 
+                                                val fileName = "GryzorUpdate_$latestTag.apk"
                                                 val request = DownloadManager.Request(Uri.parse(apkUrl))
                                                     .setTitle("Gryzor Update $latestTag")
                                                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GryzorUpdate.apk")
+                                                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
 
                                                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                                                 val downloadId = downloadManager.enqueue(request)
@@ -973,7 +975,7 @@ fun SettingsScreen(
                                                                     val fileUri = FileProvider.getUriForFile(
                                                                         ctxt,
                                                                         "${context.packageName}.provider",
-                                                                        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GryzorUpdate.apk")
+                                                                        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
                                                                     )
                                                                     setDataAndType(fileUri, "application/vnd.android.package-archive")
                                                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -1049,7 +1051,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.82",
+                        text = "v4.83",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )
