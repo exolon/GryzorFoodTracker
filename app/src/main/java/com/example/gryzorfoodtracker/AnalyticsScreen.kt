@@ -545,7 +545,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 3. MACRO TREND GRAPH (V4.81 STICKY TOOLTIP) ---
+            // --- 3. MACRO TREND GRAPH ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -728,10 +728,8 @@ fun AnalyticsScreen(
                                                     val minDeficit = allD.minOrNull()?.coerceAtMost(0f) ?: -500f
                                                     val totalRange = maxKcal - minDeficit
 
-                                                    // Map X to nearest day index
                                                     val cIndex = (position.x / stepX).roundToInt().coerceIn(0, 30)
 
-                                                    // Haptic Tick
                                                     if (cIndex != lastMacroHapticIndex) {
                                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                         lastMacroHapticIndex = cIndex
@@ -741,7 +739,6 @@ fun AnalyticsScreen(
                                                     val prevNode = if (cIndex > 0) macroNodes[cIndex - 1] else null
                                                     val xPos = cIndex * stepX
 
-                                                    // Calculate potential snap points for this specific day
                                                     val yPoints = mutableListOf<Triple<Offset, String, Color>>()
 
                                                     val kcalToUse = if (showSignalOverlay && node.avgKcal != null) node.avgKcal else node.rawKcal
@@ -768,11 +765,9 @@ fun AnalyticsScreen(
                                                         yPoints.add(Triple(Offset(xPos, graphHeight - ((defToUse - minDeficit) / totalRange) * graphHeight), "${defToUse.toInt()} Def$deltaStr", errorColor))
                                                     }
 
-                                                    // Snap to the closest Y
                                                     tappedMacro = yPoints.minByOrNull { abs(it.first.y - position.y) }
                                                     event.changes.first().consume()
                                                 } else {
-                                                    // V4.81: Removed tappedMacro = null so tooltip stays sticky
                                                     lastMacroHapticIndex = -1
                                                 }
                                             }
@@ -940,8 +935,6 @@ fun AnalyticsScreen(
                                     var tX = offset.x - tWidth / 2
                                     if (tX < 0f) tX = 0f
                                     if (tX + tWidth > size.width) tX = size.width - tWidth
-
-                                    // V4.81: Push tooltip up higher above the thumb
                                     var tY = offset.y - tHeight - 48f
                                     if (tY < 0f) tY = offset.y + 48f
 
@@ -954,7 +947,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 4. BODY COMP TREND GRAPH (V4.81 STICKY TOOLTIP) ---
+            // --- 4. BODY COMP TREND GRAPH (V4.82 SPLIT PANE) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1008,7 +1001,7 @@ fun AnalyticsScreen(
                         }
                     }
                     Text(
-                        text = "Drag to scrub. Dynamic vertical scale.",
+                        text = "Split-pane bounds to prevent line crossing.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -1020,7 +1013,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Interactive drag-to-scrub vector graph spanning 31 days. The vertical axes automatically scale to the absolute minimum and maximum values present in your monthly data.",
+                                text = "Interactive drag-to-scrub vector graph. The canvas is segmented: the top 47.5% is dedicated entirely to Weight variance, and the bottom 47.5% is dedicated to Body Fat variance, ensuring the trend lines never visually cross.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -1072,6 +1065,11 @@ fun AnalyticsScreen(
                                                     val paddingBottom = 40f
                                                     val graphHeight = size.height - paddingBottom
 
+                                                    // V4.82 Split Pane Math
+                                                    val wRangeHeight = graphHeight * 0.475f
+                                                    val fRangeHeight = graphHeight * 0.475f
+                                                    val fStartY = graphHeight
+
                                                     val maxWeight = dynamicBounds[0]
                                                     val minWeight = dynamicBounds[1]
                                                     val maxFat = dynamicBounds[2]
@@ -1104,7 +1102,8 @@ fun AnalyticsScreen(
                                                             val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
                                                             " ($sign ${String.format("%.1f", abs(d))})"
                                                         } else ""
-                                                        yPoints.add(Triple(Offset(xPos, graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight), "${w}kg$deltaStr", primaryColor))
+                                                        val wY = wRangeHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * wRangeHeight
+                                                        yPoints.add(Triple(Offset(xPos, wY), "${w}kg$deltaStr", primaryColor))
                                                     }
 
                                                     val f = measure?.bodyFat?.toFloatOrNull()
@@ -1115,13 +1114,13 @@ fun AnalyticsScreen(
                                                             val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
                                                             " ($sign ${String.format("%.1f", abs(d))})"
                                                         } else ""
-                                                        yPoints.add(Triple(Offset(xPos, graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight), "${f}%$deltaStr", secColor))
+                                                        val fY = fStartY - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * fRangeHeight
+                                                        yPoints.add(Triple(Offset(xPos, fY), "${f}%$deltaStr", secColor))
                                                     }
 
                                                     tappedComp = yPoints.minByOrNull { abs(it.first.y - position.y) }
                                                     event.changes.first().consume()
                                                 } else {
-                                                    // V4.81: Removed tappedComp = null so tooltip stays sticky
                                                     lastCompHapticIndex = -1
                                                 }
                                             }
@@ -1131,7 +1130,11 @@ fun AnalyticsScreen(
                                 val stepX = size.width / 30f
                                 val paddingBottom = 40f
                                 val graphHeight = size.height - paddingBottom
-                                val startY = graphHeight
+
+                                // V4.82 Split Pane Math Constants
+                                val wRangeHeight = graphHeight * 0.475f
+                                val fRangeHeight = graphHeight * 0.475f
+                                val fStartY = graphHeight
 
                                 val maxWeight = dynamicBounds[0]
                                 val minWeight = dynamicBounds[1]
@@ -1149,13 +1152,13 @@ fun AnalyticsScreen(
                                     drawText(textLayoutResult = maxWLabel, topLeft = Offset(0f, 0f))
 
                                     val minWLabel = textMeasurer.measure("${wMinFormat}kg", axisStyleW)
-                                    drawText(textLayoutResult = minWLabel, topLeft = Offset(0f, graphHeight - minWLabel.size.height))
+                                    drawText(textLayoutResult = minWLabel, topLeft = Offset(0f, wRangeHeight - minWLabel.size.height))
 
                                     val fFormat = if (maxFat % 1 == 0f) maxFat.toInt().toString() else maxFat.toString()
                                     val fMinFormat = if (minFat % 1 == 0f) minFat.toInt().toString() else minFat.toString()
 
                                     val maxFLabel = textMeasurer.measure("${fFormat}%", axisStyleF)
-                                    drawText(textLayoutResult = maxFLabel, topLeft = Offset(size.width - maxFLabel.size.width, 0f))
+                                    drawText(textLayoutResult = maxFLabel, topLeft = Offset(size.width - maxFLabel.size.width, graphHeight * 0.525f))
 
                                     val minFLabel = textMeasurer.measure("${fMinFormat}%", axisStyleF)
                                     drawText(textLayoutResult = minFLabel, topLeft = Offset(size.width - minFLabel.size.width, graphHeight - minFLabel.size.height))
@@ -1181,16 +1184,18 @@ fun AnalyticsScreen(
 
                                     val w = measure?.weight?.toFloatOrNull()
                                     if (w != null) {
-                                        val y = startY + ((graphHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * graphHeight) - startY) * animProgress.value
+                                        val targetY = wRangeHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * wRangeHeight
+                                        val y = wRangeHeight + (targetY - wRangeHeight) * animProgress.value
                                         lastWX = x
-                                        if (firstW) { wPath.moveTo(x, y); wAreaPath.moveTo(x, graphHeight); wAreaPath.lineTo(x, y); firstW = false }
+                                        if (firstW) { wPath.moveTo(x, y); wAreaPath.moveTo(x, wRangeHeight); wAreaPath.lineTo(x, y); firstW = false }
                                         else { wPath.lineTo(x, y); wAreaPath.lineTo(x, y) }
                                         drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
 
                                     val f = measure?.bodyFat?.toFloatOrNull()
                                     if (f != null) {
-                                        val y = startY + ((graphHeight - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * graphHeight) - startY) * animProgress.value
+                                        val targetY = fStartY - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * fRangeHeight
+                                        val y = fStartY + (targetY - fStartY) * animProgress.value
                                         lastFX = x
                                         if (firstF) { fPath.moveTo(x, y); fAreaPath.moveTo(x, graphHeight); fAreaPath.lineTo(x, y); firstF = false }
                                         else { fPath.lineTo(x, y); fAreaPath.lineTo(x, y) }
@@ -1199,15 +1204,15 @@ fun AnalyticsScreen(
                                 }
 
                                 if (!firstW) {
-                                    wAreaPath.lineTo(lastWX, graphHeight)
+                                    wAreaPath.lineTo(lastWX, wRangeHeight)
                                     wAreaPath.close()
-                                    drawPath(path = wAreaPath, brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight))
+                                    drawPath(path = wAreaPath, brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = wRangeHeight))
                                 }
 
                                 if (!firstF) {
                                     fAreaPath.lineTo(lastFX, graphHeight)
                                     fAreaPath.close()
-                                    drawPath(path = fAreaPath, brush = Brush.verticalGradient(colors = listOf(secColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight))
+                                    drawPath(path = fAreaPath, brush = Brush.verticalGradient(colors = listOf(secColor.copy(alpha = 0.15f * animProgress.value), Color.Transparent), startY = graphHeight * 0.525f, endY = graphHeight))
                                 }
 
                                 drawPath(path = wPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
@@ -1220,8 +1225,6 @@ fun AnalyticsScreen(
                                     var tX = offset.x - tWidth / 2
                                     if (tX < 0f) tX = 0f
                                     if (tX + tWidth > size.width) tX = size.width - tWidth
-
-                                    // V4.81: Push tooltip up higher above the thumb
                                     var tY = offset.y - tHeight - 48f
                                     if (tY < 0f) tY = offset.y + 48f
 

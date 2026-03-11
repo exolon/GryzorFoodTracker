@@ -6,15 +6,15 @@ plugins {
 
 android {
     namespace = "com.example.gryzorfoodtracker"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.gryzorfoodtracker"
         minSdk = 26
         targetSdk = 36
-        // --- V4.8 HOTFIX BUMP ---
-        versionCode = 30
-        versionName = "4.81"
+        // --- V4.82 DEPLOYMENT BUMP ---
+        versionCode = 31
+        versionName = "4.82"
         // ----------------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
