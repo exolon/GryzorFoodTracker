@@ -35,8 +35,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -44,6 +46,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -58,7 +61,7 @@ import java.util.UUID
 import kotlin.random.Random
 
 val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
-val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target") // V4.8
+val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,6 +104,28 @@ fun SettingsScreen(
     var showChangelog by remember { mutableStateOf(false) }
     var showManual by remember { mutableStateOf(false) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    // --- V4.81 Cursor Jump Fixes ---
+    var localWeightState by remember { mutableStateOf(TextFieldValue(targetWeightStr)) }
+    var localFastState by remember { mutableStateOf(TextFieldValue(fastingTargetStr)) }
+
+    LaunchedEffect(targetWeightStr) {
+        if (localWeightState.text != targetWeightStr) {
+            localWeightState = localWeightState.copy(
+                text = targetWeightStr,
+                selection = TextRange(targetWeightStr.length)
+            )
+        }
+    }
+
+    LaunchedEffect(fastingTargetStr) {
+        if (localFastState.text != fastingTargetStr) {
+            localFastState = localFastState.copy(
+                text = fastingTargetStr,
+                selection = TextRange(fastingTargetStr.length)
+            )
+        }
+    }
 
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -275,6 +300,7 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v4.81" to "The Polish Pass: Fixed DataStore async cursor jumping in Settings. Made chart tooltips sticky to avoid thumb occlusion. Added explicit suspension delay to ensure OTA backup success toast is visible before installation.",
                         "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips (Deltas). Added optional Fasting Target gamification to the Daily UI.",
                         "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine. Built OTA GitHub updater with Auto-Backup directory linking.",
                         "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
@@ -440,10 +466,11 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         OutlinedTextField(
-                            value = targetWeightStr,
+                            value = localWeightState,
                             onValueChange = { newVal ->
+                                localWeightState = newVal
                                 coroutineScope.launch {
-                                    context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal }
+                                    context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal.text }
                                 }
                             },
                             label = { Text(text = "Target Weight (kg)") },
@@ -453,10 +480,11 @@ fun SettingsScreen(
                         )
 
                         OutlinedTextField(
-                            value = fastingTargetStr,
+                            value = localFastState,
                             onValueChange = { newVal ->
+                                localFastState = newVal
                                 coroutineScope.launch {
-                                    context.dataStore.edit { it[FASTING_TARGET_KEY] = newVal }
+                                    context.dataStore.edit { it[FASTING_TARGET_KEY] = newVal.text }
                                 }
                             },
                             label = { Text(text = "Fast Target (hrs)") },
@@ -880,7 +908,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "v4.8"
+                                            val currentVersion = "v4.81"
                                             val latestVal = latestTag.replace("v", "").replace(".", "").toIntOrNull() ?: 0
                                             val currentVal = currentVersion.replace("v", "").replace(".", "").toIntOrNull() ?: 0
 
@@ -928,14 +956,17 @@ fun SettingsScreen(
                                                                                     inStream.copyTo(outStream)
                                                                                 }
                                                                             }
+                                                                            // V4.81 Toast Fix - Explicit delay before installer launches
                                                                             withContext(Dispatchers.Main) {
-                                                                                Toast.makeText(context, "Pre-update DB Backup secured.", Toast.LENGTH_SHORT).show()
+                                                                                Toast.makeText(context, "✅ Pre-update DB Backup saved to your folder.", Toast.LENGTH_LONG).show()
                                                                             }
+                                                                            delay(2000)
                                                                         }
                                                                     } catch (e: Exception) {
                                                                         withContext(Dispatchers.Main) {
-                                                                            Toast.makeText(context, "Auto-Backup skipped/failed.", Toast.LENGTH_SHORT).show()
+                                                                            Toast.makeText(context, "⚠️ Auto-Backup skipped/failed.", Toast.LENGTH_SHORT).show()
                                                                         }
+                                                                        delay(1500)
                                                                     }
                                                                 }
 
@@ -1019,7 +1050,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.8",
+                        text = "v4.81",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

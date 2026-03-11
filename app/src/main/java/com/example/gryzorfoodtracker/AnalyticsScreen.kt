@@ -545,7 +545,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 3. MACRO TREND GRAPH (V4.8 HAPTIC SCRUB & RELATIVE DELTAS) ---
+            // --- 3. MACRO TREND GRAPH (V4.81 STICKY TOOLTIP) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -772,7 +772,7 @@ fun AnalyticsScreen(
                                                     tappedMacro = yPoints.minByOrNull { abs(it.first.y - position.y) }
                                                     event.changes.first().consume()
                                                 } else {
-                                                    tappedMacro = null
+                                                    // V4.81: Removed tappedMacro = null so tooltip stays sticky
                                                     lastMacroHapticIndex = -1
                                                 }
                                             }
@@ -940,8 +940,10 @@ fun AnalyticsScreen(
                                     var tX = offset.x - tWidth / 2
                                     if (tX < 0f) tX = 0f
                                     if (tX + tWidth > size.width) tX = size.width - tWidth
-                                    var tY = offset.y - tHeight - 16f
-                                    if (tY < 0f) tY = offset.y + 16f
+
+                                    // V4.81: Push tooltip up higher above the thumb
+                                    var tY = offset.y - tHeight - 48f
+                                    if (tY < 0f) tY = offset.y + 48f
 
                                     drawRoundRect(color = color, topLeft = Offset(tX, tY), size = Size(tWidth, tHeight), cornerRadius = CornerRadius(12f, 12f))
                                     drawText(textLayoutResult = textLayout, topLeft = Offset(tX + 12f, tY + 8f))
@@ -952,7 +954,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 4. BODY COMP TREND GRAPH (V4.8 HAPTIC SCRUB & DELTAS) ---
+            // --- 4. BODY COMP TREND GRAPH (V4.81 STICKY TOOLTIP) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1119,7 +1121,7 @@ fun AnalyticsScreen(
                                                     tappedComp = yPoints.minByOrNull { abs(it.first.y - position.y) }
                                                     event.changes.first().consume()
                                                 } else {
-                                                    tappedComp = null
+                                                    // V4.81: Removed tappedComp = null so tooltip stays sticky
                                                     lastCompHapticIndex = -1
                                                 }
                                             }
@@ -1218,8 +1220,10 @@ fun AnalyticsScreen(
                                     var tX = offset.x - tWidth / 2
                                     if (tX < 0f) tX = 0f
                                     if (tX + tWidth > size.width) tX = size.width - tWidth
-                                    var tY = offset.y - tHeight - 16f
-                                    if (tY < 0f) tY = offset.y + 16f
+
+                                    // V4.81: Push tooltip up higher above the thumb
+                                    var tY = offset.y - tHeight - 48f
+                                    if (tY < 0f) tY = offset.y + 48f
 
                                     drawRoundRect(color = color, topLeft = Offset(tX, tY), size = Size(tWidth, tHeight), cornerRadius = CornerRadius(12f, 12f))
                                     drawText(textLayoutResult = textLayout, topLeft = Offset(tX + 12f, tY + 8f))
