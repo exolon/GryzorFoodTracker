@@ -100,8 +100,6 @@ fun AnalyticsScreen(
     val last14Days = remember(today) {
         (13 downTo 0).map { today.minusDays(it.toLong()).toString() }
     }
-
-    // --- V4.7: 31-DAY HORIZON GENERATOR ---
     val last31Days = remember(today) {
         (30 downTo 0).map { today.minusDays(it.toLong()).toString() }
     }
@@ -396,7 +394,6 @@ fun AnalyticsScreen(
                                     .padding(16.dp)
                             ) {
                                 Column {
-                                    // V4.7 NOMENCLATURE UPDATE
                                     Text(
                                         text = "7-Day Avg Intake",
                                         style = MaterialTheme.typography.labelMedium,
@@ -582,7 +579,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 3. MACRO TREND GRAPH (31-DAY + SIGNAL TOGGLE) ---
+            // --- 3. MACRO TREND GRAPH (31-DAY OVERLAY) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -608,8 +605,7 @@ fun AnalyticsScreen(
                 )
 
                 var tappedMacro by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
-                // V4.7: SIGNAL TOGGLE STATE
-                var useSignalMode by remember { mutableStateOf(false) }
+                var showSignalOverlay by remember { mutableStateOf(false) } // V4.7 OVERLAY TOGGLE
 
                 Column(
                     modifier = elasticMod(2)
@@ -650,7 +646,6 @@ fun AnalyticsScreen(
                             }
                         }
 
-                        // V4.7: THE SIGNAL TOGGLE
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
@@ -661,30 +656,30 @@ fun AnalyticsScreen(
                                 modifier = Modifier
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        useSignalMode = false
+                                        showSignalOverlay = false
                                     }
-                                    .background(if (!useSignalMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .background(if (!showSignalOverlay) MaterialTheme.colorScheme.primary else Color.Transparent)
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = "Raw",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (!useSignalMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (!showSignalOverlay) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Box(
                                 modifier = Modifier
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        useSignalMode = true
+                                        showSignalOverlay = true
                                     }
-                                    .background(if (useSignalMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .background(if (showSignalOverlay) MaterialTheme.colorScheme.primary else Color.Transparent)
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = "Signal",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (useSignalMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (showSignalOverlay) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -704,7 +699,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Interactive vector graph. 'Raw' displays volatile daily totals. 'Signal' dynamically recalculates every point into a Trailing 7-Day Average, flattening out noise to reveal your true metabolic baseline.",
+                                text = "Interactive vector graph. Toggling 'Signal' overlays a smooth Trailing 7-Day Average line on top of your raw daily data, cutting through daily volatility to reveal your true trajectory.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -716,30 +711,31 @@ fun AnalyticsScreen(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    // V4.7: PRE-CALCULATE GRAPH POINTS BASED ON SIGNAL TOGGLE
-                    val macroPoints = remember(last31Days, allMetrics, useSignalMode) {
+                    // Data class to hold both raw and average for a single day
+                    data class MacroNode(
+                        val date: String,
+                        val rawKcal: Float?,
+                        val rawDef: Float?,
+                        val avgKcal: Float?,
+                        val avgDef: Float?
+                    )
+
+                    val macroNodes = remember(last31Days, allMetrics) {
                         last31Days.map { date ->
-                            if (useSignalMode) {
-                                // 7-Day Trailing Average calculation
-                                val window = (6 downTo 0).map { LocalDate.parse(date).minusDays(it.toLong()).toString() }
-                                val windowMetrics = allMetrics.filter { window.contains(it.date) }
+                            val metric = allMetrics.find { it.date == date }
+                            val rK = metric?.totalKcal?.toFloatOrNull()
+                            val rD = metric?.deficit?.toFloatOrNull()
 
-                                val k = windowMetrics.mapNotNull { it.totalKcal.toDoubleOrNull() }
-                                val d = windowMetrics.mapNotNull { it.deficit.toDoubleOrNull() }
+                            val window = (6 downTo 0).map { LocalDate.parse(date).minusDays(it.toLong()).toString() }
+                            val windowMetrics = allMetrics.filter { window.contains(it.date) }
 
-                                val avgK = if (k.isNotEmpty()) k.average().toFloat() else null
-                                val avgD = if (d.isNotEmpty()) d.average().toFloat() else null
+                            val kList = windowMetrics.mapNotNull { it.totalKcal.toDoubleOrNull() }
+                            val dList = windowMetrics.mapNotNull { it.deficit.toDoubleOrNull() }
 
-                                Triple(date, avgK, avgD)
-                            } else {
-                                // Raw daily data
-                                val metric = allMetrics.find { it.date == date }
-                                Triple(
-                                    date,
-                                    metric?.totalKcal?.toFloatOrNull(),
-                                    metric?.deficit?.toFloatOrNull()
-                                )
-                            }
+                            val aK = if (kList.isNotEmpty()) kList.average().toFloat() else null
+                            val aD = if (dList.isNotEmpty()) dList.average().toFloat() else null
+
+                            MacroNode(date, rK, rD, aK, aD)
                         }
                     }
 
@@ -762,31 +758,30 @@ fun AnalyticsScreen(
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(macroPoints) {
+                                    .pointerInput(macroNodes) {
                                         detectTapGestures { tapOffset ->
-                                            val stepX = size.width / 30f // 31 days = 30 intervals
+                                            val stepX = size.width / 30f
                                             val paddingBottom = 40f
                                             val graphHeight = size.height - paddingBottom
 
-                                            val validKs = macroPoints.mapNotNull { it.second }
-                                            val maxKcal = validKs.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
+                                            val allK = macroNodes.mapNotNull { it.rawKcal } + macroNodes.mapNotNull { it.avgKcal }
+                                            val allD = macroNodes.mapNotNull { it.rawDef } + macroNodes.mapNotNull { it.avgDef }
 
-                                            val validDs = macroPoints.mapNotNull { it.third }
-                                            val minDeficit = validDs.minOrNull()?.coerceAtMost(0f) ?: -500f
-
+                                            val maxKcal = allK.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
+                                            val minDeficit = allD.minOrNull()?.coerceAtMost(0f) ?: -500f
                                             val totalRange = maxKcal - minDeficit
 
                                             val points = mutableListOf<Triple<Offset, String, Color>>()
 
-                                            macroPoints.forEachIndexed { index, data ->
+                                            macroNodes.forEachIndexed { index, node ->
                                                 val x = index * stepX
-                                                val kcal = data.second
-                                                if (kcal != null) {
-                                                    points.add(Triple(Offset(x, graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight), "${kcal.toInt()} In", primaryColor))
+                                                val kcalToUse = if (showSignalOverlay && node.avgKcal != null) node.avgKcal else node.rawKcal
+                                                if (kcalToUse != null) {
+                                                    points.add(Triple(Offset(x, graphHeight - ((kcalToUse - minDeficit) / totalRange) * graphHeight), "${kcalToUse.toInt()} In", primaryColor))
                                                 }
-                                                val deficit = data.third
-                                                if (deficit != null) {
-                                                    points.add(Triple(Offset(x, graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight), "${deficit.toInt()} Def", errorColor))
+                                                val defToUse = if (showSignalOverlay && node.avgDef != null) node.avgDef else node.rawDef
+                                                if (defToUse != null) {
+                                                    points.add(Triple(Offset(x, graphHeight - ((defToUse - minDeficit) / totalRange) * graphHeight), "${defToUse.toInt()} Def", errorColor))
                                                 }
                                             }
 
@@ -804,18 +799,19 @@ fun AnalyticsScreen(
                                 val paddingBottom = 40f
                                 val graphHeight = size.height - paddingBottom
 
-                                val validKs = macroPoints.mapNotNull { it.second }
-                                val maxKcal = validKs.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
-                                val minKcal = validKs.minOrNull() ?: 0f
+                                val allK = macroNodes.mapNotNull { it.rawKcal } + macroNodes.mapNotNull { it.avgKcal }
+                                val allD = macroNodes.mapNotNull { it.rawDef } + macroNodes.mapNotNull { it.avgDef }
 
-                                val validDs = macroPoints.mapNotNull { it.third }
-                                val minDeficit = validDs.minOrNull()?.coerceAtMost(0f) ?: -500f
-                                val maxDeficit = validDs.maxOrNull() ?: 0f
+                                val maxKcal = allK.maxOrNull()?.coerceAtLeast(2500f) ?: 2500f
+                                val minKcal = allK.minOrNull() ?: 0f
+
+                                val minDeficit = allD.minOrNull()?.coerceAtMost(0f) ?: -500f
+                                val maxDeficit = allD.maxOrNull() ?: 0f
 
                                 val totalRange = maxKcal - minDeficit
 
-                                macroPoints.forEachIndexed { index, data ->
-                                    val date = data.first
+                                macroNodes.forEachIndexed { index, node ->
+                                    val date = node.date
                                     val tagsForDate = allTags.find { it.date == date }?.tags ?: ""
 
                                     if (tagsForDate.contains("Grind", ignoreCase = true)) {
@@ -827,7 +823,6 @@ fun AnalyticsScreen(
                                         )
                                     }
 
-                                    // V4.7 MODULO TEXT SKIP (Prevents 31 days from overlapping)
                                     if (index % 6 == 0 || index == 30) {
                                         val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
                                         drawText(
@@ -845,7 +840,6 @@ fun AnalyticsScreen(
                                     strokeWidth = 2f
                                 )
 
-                                // --- EXPLICIT AXIS LABELS ---
                                 if (animProgress.value > 0.8f && totalRange > 0) {
                                     val maxKcalLabel = textMeasurer.measure("${maxKcal.toInt()} In", axisStyleKcal)
                                     drawText(
@@ -878,79 +872,121 @@ fun AnalyticsScreen(
                                     }
                                 }
 
-                                val kcalPath = Path()
-                                val deficitPath = Path()
-                                val kcalAreaPath = Path()
-                                val deficitAreaPath = Path()
-                                var firstKcal = true
-                                var firstDeficit = true
-                                var lastKcalX = 0f
-                                var lastDefX = 0f
+                                val rawKcalPath = Path()
+                                val rawDefPath = Path()
+                                val avgKcalPath = Path()
+                                val avgDefPath = Path()
 
-                                macroPoints.forEachIndexed { index, data ->
+                                val rawKcalArea = Path()
+                                val rawDefArea = Path()
+
+                                var firstRawK = true
+                                var firstRawD = true
+                                var firstAvgK = true
+                                var firstAvgD = true
+
+                                var lastRawKX = 0f
+                                var lastRawDX = 0f
+
+                                macroNodes.forEachIndexed { index, node ->
                                     val x = index * stepX
-                                    val kcal = data.second
 
-                                    if (kcal != null) {
-                                        val y = zeroY + ((graphHeight - ((kcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
-                                        lastKcalX = x
-                                        if (firstKcal) {
-                                            kcalPath.moveTo(x, y)
-                                            kcalAreaPath.moveTo(x, graphHeight)
-                                            kcalAreaPath.lineTo(x, y)
-                                            firstKcal = false
+                                    // RAW PLOTTING
+                                    if (node.rawKcal != null) {
+                                        val y = zeroY + ((graphHeight - ((node.rawKcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
+                                        lastRawKX = x
+                                        if (firstRawK) {
+                                            rawKcalPath.moveTo(x, y)
+                                            rawKcalArea.moveTo(x, graphHeight)
+                                            rawKcalArea.lineTo(x, y)
+                                            firstRawK = false
                                         } else {
-                                            kcalPath.lineTo(x, y)
-                                            kcalAreaPath.lineTo(x, y)
+                                            rawKcalPath.lineTo(x, y)
+                                            rawKcalArea.lineTo(x, y)
                                         }
                                         drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
 
-                                    val deficit = data.third
-                                    if (deficit != null) {
-                                        val y = zeroY + ((graphHeight - ((deficit - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
-                                        lastDefX = x
-                                        if (firstDeficit) {
-                                            deficitPath.moveTo(x, y)
-                                            deficitAreaPath.moveTo(x, zeroY)
-                                            deficitAreaPath.lineTo(x, y)
-                                            firstDeficit = false
+                                    if (node.rawDef != null) {
+                                        val y = zeroY + ((graphHeight - ((node.rawDef - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
+                                        lastRawDX = x
+                                        if (firstRawD) {
+                                            rawDefPath.moveTo(x, y)
+                                            rawDefArea.moveTo(x, zeroY)
+                                            rawDefArea.lineTo(x, y)
+                                            firstRawD = false
                                         } else {
-                                            deficitPath.lineTo(x, y)
-                                            deficitAreaPath.lineTo(x, y)
+                                            rawDefPath.lineTo(x, y)
+                                            rawDefArea.lineTo(x, y)
                                         }
                                         drawCircle(color = errorColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
+
+                                    // AVERAGE PLOTTING
+                                    if (node.avgKcal != null) {
+                                        val y = zeroY + ((graphHeight - ((node.avgKcal - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
+                                        if (firstAvgK) {
+                                            avgKcalPath.moveTo(x, y)
+                                            firstAvgK = false
+                                        } else {
+                                            avgKcalPath.lineTo(x, y)
+                                        }
+                                    }
+
+                                    if (node.avgDef != null) {
+                                        val y = zeroY + ((graphHeight - ((node.avgDef - minDeficit) / totalRange) * graphHeight) - zeroY) * animProgress.value
+                                        if (firstAvgD) {
+                                            avgDefPath.moveTo(x, y)
+                                            firstAvgD = false
+                                        } else {
+                                            avgDefPath.lineTo(x, y)
+                                        }
+                                    }
                                 }
 
-                                if (!firstKcal) {
-                                    kcalAreaPath.lineTo(lastKcalX, graphHeight)
-                                    kcalAreaPath.close()
+                                if (!firstRawK) {
+                                    rawKcalArea.lineTo(lastRawKX, graphHeight)
+                                    rawKcalArea.close()
                                     drawPath(
-                                        path = kcalAreaPath,
+                                        path = rawKcalArea,
                                         brush = Brush.verticalGradient(colors = listOf(primaryColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)
                                     )
                                 }
 
-                                if (!firstDeficit) {
-                                    deficitAreaPath.lineTo(lastDefX, zeroY)
-                                    deficitAreaPath.close()
+                                if (!firstRawD) {
+                                    rawDefArea.lineTo(lastRawDX, zeroY)
+                                    rawDefArea.close()
                                     drawPath(
-                                        path = deficitAreaPath,
+                                        path = rawDefArea,
                                         brush = Brush.verticalGradient(colors = listOf(errorColor.copy(alpha = 0.2f * animProgress.value), Color.Transparent), startY = 0f, endY = graphHeight)
                                     )
                                 }
 
+                                // Draw Raw Lines
                                 drawPath(
-                                    path = kcalPath,
+                                    path = rawKcalPath,
                                     color = primaryColor.copy(alpha = animProgress.value),
                                     style = Stroke(width = 4f, cap = StrokeCap.Round)
                                 )
                                 drawPath(
-                                    path = deficitPath,
+                                    path = rawDefPath,
                                     color = errorColor.copy(alpha = animProgress.value),
                                     style = Stroke(width = 4f, cap = StrokeCap.Round)
                                 )
+
+                                // Draw Signal Overlay (Lighter, no dots, thicker)
+                                if (showSignalOverlay) {
+                                    drawPath(
+                                        path = avgKcalPath,
+                                        color = primaryColor.copy(alpha = 0.5f * animProgress.value),
+                                        style = Stroke(width = 8f, cap = StrokeCap.Round)
+                                    )
+                                    drawPath(
+                                        path = avgDefPath,
+                                        color = errorColor.copy(alpha = 0.5f * animProgress.value),
+                                        style = Stroke(width = 8f, cap = StrokeCap.Round)
+                                    )
+                                }
 
                                 tappedMacro?.let { (offset, text, color) ->
                                     val textLayout = textMeasurer.measure(text, tooltipStyle)
@@ -1160,7 +1196,6 @@ fun AnalyticsScreen(
                                 var lastFX = 0f
 
                                 last31Days.forEachIndexed { index, date ->
-                                    // V4.7 MODULO TEXT SKIP (Prevents 31 days from overlapping)
                                     if (index % 6 == 0 || index == 30) {
                                         val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
                                         drawText(

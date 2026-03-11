@@ -1,9 +1,12 @@
 package com.example.gryzorfoodtracker
 
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Environment
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,9 +43,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +83,7 @@ fun SettingsScreen(
     var requiresRestart by remember { mutableStateOf(false) }
     var showChangelog by remember { mutableStateOf(false) }
     var showManual by remember { mutableStateOf(false) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
 
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -255,11 +263,15 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal toggle. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine.",
+                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine. Built OTA GitHub updater.",
                         "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
                         "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math. Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard.",
                         "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery'. Built Self-Healing data matrix.",
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Caloric VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix."
+                        "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio.",
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Caloric VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
+                        "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags, dynamic Cognitive Load tracking, and Phase Modes (Cut/Bulk).",
+                        "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine, gesture-based entry duplication, and robust Room SQL database persistence.",
+                        "v1.0" to "Initial Release: The baseline architecture. Simple daily Macro and Deficit tracking, manual meal entry, and fundamental timeline generation."
                     )
                     items(logs) { (version, notes) ->
                         Column(
@@ -704,6 +716,58 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
+
+                    // --- V4.7 SEED DEBUG DATA BUTTON ---
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    val random = Random(System.currentTimeMillis())
+                                    var currentWeight = 82f
+                                    val todayDate = LocalDate.now()
+
+                                    (30 downTo 0).forEach { i ->
+                                        val d = todayDate.minusDays(i.toLong()).toString()
+
+                                        val isGrind = random.nextBoolean()
+                                        val rSleep = random.nextInt(2, 6)
+                                        val rLoad = random.nextInt(1, 5)
+                                        val tags = mutableListOf("Friction: $rLoad", "Sleep: $rSleep")
+                                        if (isGrind) tags.add("Grind") else tags.add("Recovery")
+
+                                        dao.insertTags(DailyTagEntity(d, tags.joinToString(",")))
+
+                                        val intake = 2000 + random.nextInt(800)
+                                        val deficit = random.nextInt(300, 700) * if (random.nextFloat() > 0.2f) 1 else -1
+                                        dao.insertMetric(DailyMetricEntity(d, intake.toString(), deficit.toString()))
+
+                                        currentWeight -= (deficit / 7700f)
+                                        dao.insertMeasurement(MeasurementEntity(d, String.format("%.1f", currentWeight), "15.5"))
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "31 Days of Seed Data Injected", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.BugReport,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
+                        Text(
+                            text = "Inject Seed Data (Debug)",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
@@ -782,6 +846,92 @@ fun SettingsScreen(
                         )
                         Text(
                             text = "GitHub Repository",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+
+                    // --- V4.7 OTA UPDATER ---
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isCheckingUpdate) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                isCheckingUpdate = true
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val url = URL("https://api.github.com/repos/exolon/GryzorFoodTracker/releases/latest")
+                                        val connection = url.openConnection() as HttpURLConnection
+                                        connection.requestMethod = "GET"
+                                        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+
+                                        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                                            val response = connection.inputStream.bufferedReader().readText()
+                                            val json = JSONObject(response)
+                                            val tagName = json.getString("tag_name")
+                                            val assets = json.getJSONArray("assets")
+
+                                            var apkUrl: String? = null
+                                            for (i in 0 until assets.length()) {
+                                                val asset = assets.getJSONObject(i)
+                                                if (asset.getString("name").endsWith(".apk")) {
+                                                    apkUrl = asset.getString("browser_download_url")
+                                                    break
+                                                }
+                                            }
+
+                                            val currentVersion = "v4.7" // Hardcoded check
+                                            if (tagName != currentVersion && apkUrl != null) {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "Downloading update $tagName...", Toast.LENGTH_LONG).show()
+                                                }
+                                                val request = DownloadManager.Request(Uri.parse(apkUrl))
+                                                    .setTitle("Gryzor Food Tracker Update")
+                                                    .setDescription("Downloading $tagName")
+                                                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GryzorTracker_$tagName.apk")
+
+                                                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                                downloadManager.enqueue(request)
+                                            } else {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "You are on the latest version ($currentVersion)", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        } else {
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(context, "Failed to check for updates.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(context, "Error checking updates.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } finally {
+                                        withContext(Dispatchers.Main) { isCheckingUpdate = false }
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.SystemUpdate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(
+                            modifier = Modifier.width(16.dp)
+                        )
+                        Text(
+                            text = if (isCheckingUpdate) "Checking GitHub..." else "Check for Updates",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
