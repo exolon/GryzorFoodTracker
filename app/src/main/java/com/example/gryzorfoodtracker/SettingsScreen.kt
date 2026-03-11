@@ -1,12 +1,15 @@
 package com.example.gryzorfoodtracker
 
 import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,7 +39,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -44,12 +49,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.random.Random
+
+// Add this if it isn't in your central keys file
+val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +87,10 @@ fun SettingsScreen(
     val customTags by context.dataStore.data
         .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
         .collectAsState(DEFAULT_TAGS)
+
+    val autoBackupUriStr by context.dataStore.data
+        .map { it[AUTO_BACKUP_URI_KEY] ?: "" }
+        .collectAsState("")
 
     var newTagText by remember { mutableStateOf("") }
     var requiresRestart by remember { mutableStateOf(false) }
@@ -155,6 +168,25 @@ fun SettingsScreen(
         }
     }
 
+    // --- DIRECTORY PICKER LAUNCHER FOR AUTO-BACKUP ---
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                // Grant persistent permissions so we can write here silently in the future
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                context.dataStore.edit { it[AUTO_BACKUP_URI_KEY] = uri.toString() }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Auto-Backup Folder Set!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     if (requiresRestart) {
         AlertDialog(
             onDismissRequest = { },
@@ -194,9 +226,7 @@ fun SettingsScreen(
                 Text(text = "App Manual")
             },
             text = {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     item {
                         Text(
                             text = "The Capture Engine",
@@ -208,9 +238,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
                             text = "The Context Layer",
@@ -222,9 +250,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
                             text = "Behavioral Engine",
@@ -232,7 +258,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks, metabolic volatility, and compromised sleep.\n• Caloric VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Willpower Tax: Correlates your Sleep Quality against your deficit success rate.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 31-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' vs 'Rest/Recovery' tags.",
+                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks, metabolic volatility, and compromised sleep.\n• Intake VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Willpower Tax: Correlates your Sleep Quality against your deficit success rate.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 31-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' vs 'Rest/Recovery' tags.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -263,20 +289,18 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine. Built OTA GitHub updater.",
+                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine. Built OTA GitHub updater with Auto-Backup directory linking.",
                         "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
                         "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math. Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard.",
                         "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery'. Built Self-Healing data matrix.",
                         "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio.",
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Caloric VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Intake VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
                         "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags, dynamic Cognitive Load tracking, and Phase Modes (Cut/Bulk).",
                         "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine, gesture-based entry duplication, and robust Room SQL database persistence.",
                         "v1.0" to "Initial Release: The baseline architecture. Simple daily Macro and Deficit tracking, manual meal entry, and fundamental timeline generation."
                     )
                     items(logs) { (version, notes) ->
-                        Column(
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        ) {
+                        Column(modifier = Modifier.padding(bottom = 16.dp)) {
                             Text(
                                 text = version,
                                 fontWeight = FontWeight.Bold,
@@ -306,9 +330,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(text = "Options")
-                },
+                title = { Text(text = "Options") },
                 navigationIcon = {
                     IconButton(
                         onClick = {
@@ -337,17 +359,11 @@ fun SettingsScreen(
                 .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
-            item {
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-            }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
 
             // --- APPEARANCE SECTION ---
             item {
-                Column(
-                    modifier = elasticMod(0)
-                ) {
+                Column(modifier = elasticMod(0)) {
                     Row(
                         modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 0.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -358,9 +374,7 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(
-                            modifier = Modifier.width(12.dp)
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "Appearance",
                             style = MaterialTheme.typography.titleMedium,
@@ -393,17 +407,13 @@ fun SettingsScreen(
                                 selected = themePreference == key,
                                 onClick = null
                             )
-                            Spacer(
-                                modifier = Modifier.width(16.dp)
-                            )
+                            Spacer(modifier = Modifier.width(16.dp))
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(
-                                modifier = Modifier.width(16.dp)
-                            )
+                            Spacer(modifier = Modifier.width(16.dp))
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.bodyLarge
@@ -415,9 +425,7 @@ fun SettingsScreen(
 
             // --- GOALS & PHASE SECTION ---
             item {
-                Column(
-                    modifier = elasticMod(1)
-                ) {
+                Column(modifier = elasticMod(1)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -432,9 +440,7 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(
-                            modifier = Modifier.width(12.dp)
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "Physical Goals",
                             style = MaterialTheme.typography.titleMedium,
@@ -449,16 +455,12 @@ fun SettingsScreen(
                                 context.dataStore.edit { it[TARGET_WEIGHT_KEY] = newVal }
                             }
                         },
-                        label = {
-                            Text(text = "Target Body Weight (kg)")
-                        },
+                        label = { Text(text = "Target Body Weight (kg)") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number
-                        )
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
 
                     Row(
@@ -477,9 +479,7 @@ fun SettingsScreen(
                             selected = phasePreference == "cut",
                             onClick = null
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
                                 text = "Cut Mode",
@@ -510,9 +510,7 @@ fun SettingsScreen(
                             selected = phasePreference == "bulk",
                             onClick = null
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
                                 text = "Bulk Mode",
@@ -531,9 +529,7 @@ fun SettingsScreen(
 
             // --- CONTEXT TAGS SECTION ---
             item {
-                Column(
-                    modifier = elasticMod(2)
-                ) {
+                Column(modifier = elasticMod(2)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -548,9 +544,7 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(
-                            modifier = Modifier.width(12.dp)
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "Context Tags",
                             style = MaterialTheme.typography.titleMedium,
@@ -565,19 +559,13 @@ fun SettingsScreen(
                     ) {
                         OutlinedTextField(
                             value = newTagText,
-                            onValueChange = {
-                                newTagText = it
-                            },
+                            onValueChange = { newTagText = it },
                             modifier = Modifier.weight(1f),
-                            placeholder = {
-                                Text(text = "e.g. High Carb Day")
-                            },
+                            placeholder = { Text(text = "e.g. High Carb Day") },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp)
                         )
-                        Spacer(
-                            modifier = Modifier.width(12.dp)
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Button(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -598,9 +586,7 @@ fun SettingsScreen(
                             Text(text = "Add")
                         }
                     }
-                    Spacer(
-                        modifier = Modifier.height(16.dp)
-                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
@@ -644,9 +630,7 @@ fun SettingsScreen(
 
             // --- DATA MANAGEMENT SECTION ---
             item {
-                Column(
-                    modifier = elasticMod(3)
-                ) {
+                Column(modifier = elasticMod(3)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -661,15 +645,44 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(
-                            modifier = Modifier.width(12.dp)
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "Data Management",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+
+                    // Auto-Backup Path Setter
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                folderPickerLauncher.launch(null)
+                            }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CreateNewFolder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = "Set Auto-Backup Folder",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = if (autoBackupUriStr.isBlank()) "Not Set" else "Folder Linked",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (autoBackupUriStr.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -685,14 +698,13 @@ fun SettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
-                            text = "Export Database",
+                            text = "Manual Export Database",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -708,9 +720,7 @@ fun SettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "Import Database",
                             style = MaterialTheme.typography.bodyLarge
@@ -759,9 +769,7 @@ fun SettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "Inject Seed Data (Debug)",
                             style = MaterialTheme.typography.bodyLarge,
@@ -771,11 +779,9 @@ fun SettingsScreen(
                 }
             }
 
-            // --- ABOUT SECTION ---
+            // --- ABOUT & SYSTEM SECTION ---
             item {
-                Column(
-                    modifier = elasticMod(4)
-                ) {
+                Column(modifier = elasticMod(4)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -795,9 +801,7 @@ fun SettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "App Manual",
                             style = MaterialTheme.typography.bodyLarge
@@ -818,9 +822,7 @@ fun SettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "View Changelog",
                             style = MaterialTheme.typography.bodyLarge
@@ -841,16 +843,14 @@ fun SettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "GitHub Repository",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
 
-                    // --- V4.7 OTA UPDATER ---
+                    // --- V4.7 OTA UPDATER (WITH AUTO-BACKUP & AUTO-INSTALL) ---
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -867,7 +867,7 @@ fun SettingsScreen(
                                         if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                                             val response = connection.inputStream.bufferedReader().readText()
                                             val json = JSONObject(response)
-                                            val tagName = json.getString("tag_name")
+                                            val latestTag = json.getString("tag_name")
                                             val assets = json.getJSONArray("assets")
 
                                             var apkUrl: String? = null
@@ -879,22 +879,100 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "v4.7" // Hardcoded check
-                                            if (tagName != currentVersion && apkUrl != null) {
+                                            // Validate version using simple integer comparison
+                                            val currentVersion = "v4.7"
+                                            val latestVal = latestTag.replace("v", "").replace(".", "").toIntOrNull() ?: 0
+                                            val currentVal = currentVersion.replace("v", "").replace(".", "").toIntOrNull() ?: 0
+
+                                            if (latestVal > currentVal && apkUrl != null) {
                                                 withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "Downloading update $tagName...", Toast.LENGTH_LONG).show()
+                                                    Toast.makeText(context, "Version $latestTag found! Downloading...", Toast.LENGTH_LONG).show()
                                                 }
+
                                                 val request = DownloadManager.Request(Uri.parse(apkUrl))
-                                                    .setTitle("Gryzor Food Tracker Update")
-                                                    .setDescription("Downloading $tagName")
+                                                    .setTitle("Gryzor Update $latestTag")
                                                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GryzorTracker_$tagName.apk")
+                                                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GryzorUpdate.apk")
 
                                                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                                downloadManager.enqueue(request)
+                                                val downloadId = downloadManager.enqueue(request)
+
+                                                // Register broadcast receiver to backup and auto-install when download finishes
+                                                val onComplete = object : BroadcastReceiver() {
+                                                    override fun onReceive(ctxt: Context, intent: Intent) {
+                                                        val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+                                                        if (id == downloadId) {
+
+                                                            // --- FIX: Capture the BroadcastReceiver reference before entering the coroutine
+                                                            val currentReceiver = this
+
+                                                            coroutineScope.launch(Dispatchers.IO) {
+                                                                // 1. PERFORM SILENT AUTO-BACKUP IF DIRECTORY IS SET
+                                                                val savedUriStr = context.dataStore.data.first()[AUTO_BACKUP_URI_KEY]
+                                                                if (!savedUriStr.isNullOrBlank()) {
+                                                                    try {
+                                                                        val treeUri = Uri.parse(savedUriStr)
+                                                                        val docId = DocumentsContract.getTreeDocumentId(treeUri)
+                                                                        val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                                                                        val backupUri = DocumentsContract.createDocument(
+                                                                            context.contentResolver,
+                                                                            docUri,
+                                                                            "application/octet-stream",
+                                                                            "gryzor_autobackup_${LocalDate.now()}_$currentVersion.db"
+                                                                        )
+
+                                                                        if (backupUri != null) {
+                                                                            val cursor = db.query("PRAGMA wal_checkpoint(TRUNCATE)", null)
+                                                                            cursor.moveToFirst()
+                                                                            cursor.close()
+
+                                                                            val dbFile = context.getDatabasePath("food_tracker_db")
+                                                                            context.contentResolver.openOutputStream(backupUri)?.use { outStream ->
+                                                                                dbFile.inputStream().use { inStream ->
+                                                                                    inStream.copyTo(outStream)
+                                                                                }
+                                                                            }
+                                                                            withContext(Dispatchers.Main) {
+                                                                                Toast.makeText(context, "Pre-update DB Backup secured.", Toast.LENGTH_SHORT).show()
+                                                                            }
+                                                                        }
+                                                                    } catch (e: Exception) {
+                                                                        withContext(Dispatchers.Main) {
+                                                                            Toast.makeText(context, "Auto-Backup skipped/failed.", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // 2. FIRE THE APK INSTALL INTENT
+                                                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                                    val fileUri = FileProvider.getUriForFile(
+                                                                        ctxt,
+                                                                        "${context.packageName}.provider",
+                                                                        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GryzorUpdate.apk")
+                                                                    )
+                                                                    setDataAndType(fileUri, "application/vnd.android.package-archive")
+                                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                                }
+                                                                context.startActivity(installIntent)
+
+                                                                // 3. FIX: Unregister using the captured reference
+                                                                context.unregisterReceiver(currentReceiver)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+// Register the receiver
+                                                context.registerReceiver(
+                                                    onComplete,
+                                                    IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+                                                    Context.RECEIVER_EXPORTED
+                                                )
+
                                             } else {
                                                 withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "You are on the latest version ($currentVersion)", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, "Up to date ($currentVersion)", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         } else {
@@ -927,9 +1005,7 @@ fun SettingsScreen(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
-                        Spacer(
-                            modifier = Modifier.width(16.dp)
-                        )
+                        Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = if (isCheckingUpdate) "Checking GitHub..." else "Check for Updates",
                             style = MaterialTheme.typography.bodyLarge
