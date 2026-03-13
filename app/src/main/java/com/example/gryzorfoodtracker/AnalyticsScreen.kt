@@ -27,7 +27,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -449,7 +451,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 2. CONSISTENCY HEATMAP ---
+            // --- 2. CONSISTENCY HEATMAP (V4.9 BIOLUMINESCENT GLOW) ---
             item {
                 val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
 
@@ -491,7 +493,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "A visual representation of adherence over a rolling 30-day window. The Primary Theme Color indicates a successful day based on your phase (Cut/Bulk). The Error Color indicates failure, and the subdued Surface Color indicates no data.",
+                                text = "A visual representation of adherence over a rolling 30-day window. Consecutive successful days generate a luminescent visual streak to physically represent momentum.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -518,12 +520,13 @@ fun AnalyticsScreen(
                             last30Days.forEach { date ->
                                 val metric = allMetrics.find { it.date == date }
                                 val defValue = metric?.deficit?.toDoubleOrNull()
+                                val isNoData = defValue == null || defValue == 0.0
                                 val isDaySuccess = if (phasePreference == "bulk") (defValue ?: 0.0) < 0 else (defValue ?: 0.0) > 0
 
-                                val boxColor = if (defValue == null || defValue == 0.0) {
+                                val boxColor = if (isNoData) {
                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                                 } else if (isDaySuccess) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                    MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
                                 }
@@ -531,14 +534,31 @@ fun AnalyticsScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(16.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(boxColor)
                                         .clickable {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             navController.previousBackStackEntry?.savedStateHandle?.set("targetDate", date)
                                             navController.popBackStack()
-                                        }
-                                )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // V4.9 Bioluminescent Under-Glow
+                                    if (!isNoData && isDaySuccess) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp) // Exceeds the 16dp bounds to spill glow outward
+                                                .blur(6.dp)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), CircleShape)
+                                        )
+                                    }
+
+                                    // Base Node
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(boxColor)
+                                    )
+                                }
                             }
                         }
                     }
@@ -947,7 +967,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 4. BODY COMP TREND GRAPH (V4.82 SPLIT PANE) ---
+            // --- 4. BODY COMP TREND GRAPH (SPLIT PANE) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1065,7 +1085,6 @@ fun AnalyticsScreen(
                                                     val paddingBottom = 40f
                                                     val graphHeight = size.height - paddingBottom
 
-                                                    // V4.82 Split Pane Math
                                                     val wRangeHeight = graphHeight * 0.475f
                                                     val fRangeHeight = graphHeight * 0.475f
                                                     val fStartY = graphHeight
@@ -1131,7 +1150,6 @@ fun AnalyticsScreen(
                                 val paddingBottom = 40f
                                 val graphHeight = size.height - paddingBottom
 
-                                // V4.82 Split Pane Math Constants
                                 val wRangeHeight = graphHeight * 0.475f
                                 val fRangeHeight = graphHeight * 0.475f
                                 val fStartY = graphHeight

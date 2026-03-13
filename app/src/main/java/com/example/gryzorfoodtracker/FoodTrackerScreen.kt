@@ -12,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -39,12 +43,13 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -61,6 +66,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -113,7 +119,7 @@ fun parseVoiceInput(
     return Triple(type, parsedTime, cleanedDesc)
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun FoodTrackerScreen(
     db: AppDatabase,
@@ -176,8 +182,6 @@ fun FoodTrackerScreen(
 
     val availableTags by context.dataStore.data.map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }.collectAsState(DEFAULT_TAGS)
     val bannedSuggestions by context.dataStore.data.map { it[BANNED_SUGGESTIONS_KEY] ?: emptySet() }.collectAsState(emptySet())
-
-    // V4.8 FASTING TARGET
     val fastingTargetStr by context.dataStore.data.map { it[FASTING_TARGET_KEY] ?: "" }.collectAsState("")
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -245,12 +249,12 @@ fun FoodTrackerScreen(
 
     val appScale by animateFloatAsState(
         targetValue = if (showAddDialog) 0.94f else 1f,
-        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 200f),
         label = "scale"
     )
     val appBlur by animateDpAsState(
         targetValue = if (showAddDialog) 16.dp else 0.dp,
-        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 200f),
         label = "blur"
     )
 
@@ -260,11 +264,72 @@ fun FoodTrackerScreen(
     val headerFriction = headerTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
     val headerSleep = headerTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
+    // --- V4.9 AMBIENT STATE AURA LOGIC ---
+    val isStressed = headerFriction >= 4 || (headerSleep in 1..2)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val errorColor = MaterialTheme.colorScheme.error
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val backgroundColor = MaterialTheme.colorScheme.background
+
+    val targetAuraColor = if (isStressed) errorColor.copy(alpha = 0.15f) else primaryColor.copy(alpha = 0.1f)
+    val targetAuraSecondary = if (isStressed) secondaryColor.copy(alpha = 0.1f) else Color.Transparent
+
+    val animatedAuraColor by animateColorAsState(
+        targetValue = targetAuraColor,
+        animationSpec = tween(2000),
+        label = "auraColor"
+    )
+
+    val animatedAuraSecondary by animateColorAsState(
+        targetValue = targetAuraSecondary,
+        animationSpec = tween(2000),
+        label = "auraSecondary"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "ambientBreathe")
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isStressed) 2500 else 5000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(backgroundColor)
+            .imePadding() // V4.9: Master container responds to keyboard
     ) {
+        // AMBIENT AURA CANVAS
+        Canvas(modifier = Modifier.fillMaxSize().alpha(if (showAddDialog) 0.5f else 1f)) {
+            val center1 = androidx.compose.ui.geometry.Offset(size.width * 0.2f, size.height * 0.2f)
+            val center2 = androidx.compose.ui.geometry.Offset(size.width * 0.8f, size.height * 0.7f)
+            val radius = size.width * 0.7f * breathingScale
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(animatedAuraColor, Color.Transparent),
+                    center = center1,
+                    radius = radius
+                ),
+                radius = radius,
+                center = center1
+            )
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(animatedAuraSecondary, Color.Transparent),
+                    center = center2,
+                    radius = radius * 1.2f
+                ),
+                radius = radius * 1.2f,
+                center = center2
+            )
+        }
+
         Scaffold(
             modifier = Modifier
                 .scale(appScale)
@@ -277,6 +342,7 @@ fun FoodTrackerScreen(
                     edgeTreatment = BlurredEdgeTreatment.Unbounded
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
+            containerColor = Color.Transparent, // Let the aura bleed through
             snackbarHost = {
                 SnackbarHost(hostState = snackbarHostState)
             },
@@ -436,6 +502,9 @@ fun FoodTrackerScreen(
 
                 val activeTagsList = pageTags?.tags?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                 val visualTags = activeTagsList.filter { !it.startsWith("Friction:") && !it.startsWith("Sleep:") }
+
+                // V4.9: Scroll Anchor for the Keyboard
+                val summaryCardRequester = remember { BringIntoViewRequester() }
 
                 Column(
                     modifier = Modifier
@@ -685,7 +754,7 @@ fun FoodTrackerScreen(
                                     start = 16.dp,
                                     end = 16.dp,
                                     top = 8.dp,
-                                    bottom = 100.dp
+                                    bottom = 140.dp // Added extra bottom padding for smooth keyboard clearance
                                 )
                             ) {
                                 itemsIndexed(
@@ -751,7 +820,8 @@ fun FoodTrackerScreen(
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(top = 16.dp),
+                                            .padding(top = 16.dp)
+                                            .bringIntoViewRequester(summaryCardRequester), // V4.9 Auto-Scroll Anchor
                                         shape = RoundedCornerShape(24.dp),
                                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                                         border = BorderStroke(
@@ -760,9 +830,7 @@ fun FoodTrackerScreen(
                                         )
                                     ) {
                                         Column(
-                                            modifier = Modifier
-                                                .padding(20.dp)
-                                                .onFocusChanged { isCardFocused = it.hasFocus }
+                                            modifier = Modifier.padding(20.dp)
                                         ) {
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -784,7 +852,6 @@ fun FoodTrackerScreen(
                                                     )
                                                 }
 
-                                                // --- V4.8 FASTING TARGET UI ---
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.clickable {
@@ -849,7 +916,12 @@ fun FoodTrackerScreen(
                                                         }
                                                     },
                                                     label = { Text(text = "Total Intake") },
-                                                    modifier = Modifier.weight(1f),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .onFocusChanged {
+                                                            isCardFocused = it.hasFocus
+                                                            if (it.hasFocus) { coroutineScope.launch { delay(200); summaryCardRequester.bringIntoView() } }
+                                                        },
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
                                                         imeAction = ImeAction.Next
@@ -877,7 +949,12 @@ fun FoodTrackerScreen(
                                                         }
                                                     },
                                                     label = { Text(text = "Deficit") },
-                                                    modifier = Modifier.weight(1f),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .onFocusChanged {
+                                                            isCardFocused = it.hasFocus
+                                                            if (it.hasFocus) { coroutineScope.launch { delay(200); summaryCardRequester.bringIntoView() } }
+                                                        },
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
                                                         imeAction = ImeAction.Next
@@ -911,7 +988,12 @@ fun FoodTrackerScreen(
                                                         }
                                                     },
                                                     label = { Text(text = "Weight (kg)") },
-                                                    modifier = Modifier.weight(1f),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .onFocusChanged {
+                                                            isCardFocused = it.hasFocus
+                                                            if (it.hasFocus) { coroutineScope.launch { delay(200); summaryCardRequester.bringIntoView() } }
+                                                        },
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
                                                         imeAction = ImeAction.Next
@@ -938,7 +1020,12 @@ fun FoodTrackerScreen(
                                                         }
                                                     },
                                                     label = { Text(text = "Body Fat (%)") },
-                                                    modifier = Modifier.weight(1f),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .onFocusChanged {
+                                                            isCardFocused = it.hasFocus
+                                                            if (it.hasFocus) { coroutineScope.launch { delay(200); summaryCardRequester.bringIntoView() } }
+                                                        },
                                                     keyboardOptions = KeyboardOptions(
                                                         keyboardType = KeyboardType.Number,
                                                         imeAction = ImeAction.Next
@@ -972,7 +1059,12 @@ fun FoodTrackerScreen(
                                                         color = MaterialTheme.colorScheme.outline
                                                     )
                                                 },
-                                                modifier = Modifier.fillMaxWidth(),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .onFocusChanged {
+                                                        isCardFocused = it.hasFocus
+                                                        if (it.hasFocus) { coroutineScope.launch { delay(200); summaryCardRequester.bringIntoView() } }
+                                                    },
                                                 textStyle = MaterialTheme.typography.bodyLarge,
                                                 keyboardOptions = KeyboardOptions(
                                                     imeAction = ImeAction.Done
@@ -1004,7 +1096,7 @@ fun FoodTrackerScreen(
                                                         )
                                                     ) {
                                                         Text(
-                                                            text = "OK",
+                                                            text = "Done",
                                                             color = MaterialTheme.colorScheme.secondary,
                                                             fontWeight = FontWeight.Bold
                                                         )
@@ -1021,18 +1113,19 @@ fun FoodTrackerScreen(
             }
         }
 
+        // V4.9 Liquid Spring Navigation overlay
         AnimatedVisibility(
             visible = showAddDialog,
             enter = scaleIn(
-                initialScale = 0.05f,
-                transformOrigin = TransformOrigin(0.9f, 0.9f),
-                animationSpec = tween(400, easing = FastOutSlowInEasing)
-            ) + fadeIn(tween(400)),
+                initialScale = 0.8f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f),
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f) // Liquid Pop
+            ) + fadeIn(tween(300)),
             exit = scaleOut(
-                targetScale = 0.05f,
-                transformOrigin = TransformOrigin(0.9f, 0.9f),
-                animationSpec = tween(300, easing = FastOutSlowInEasing)
-            ) + fadeOut(tween(300)),
+                targetScale = 0.8f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f),
+                animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+            ) + fadeOut(tween(200)),
             modifier = Modifier.fillMaxSize()
         ) {
             Box(

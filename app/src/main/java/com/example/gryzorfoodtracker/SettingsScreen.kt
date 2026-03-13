@@ -299,6 +299,7 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum, Keyboard-Aware Auto-Scroll for frictionless end-of-day logging, and Liquid Spring Dialog transitions.",
                         "v4.83" to "The Installer Pass: Dynamically mapped OTA file downloads to version tags to prevent stale Android DownloadManager file collisions. Switched version comparator to float evaluation to secure future major version bumps.",
                         "v4.82" to "The Split-Pane Pass: Segmented the Body Composition graph into distinct upper (Weight) and lower (Body Fat) bounds to prevent visual intersection of trend lines.",
                         "v4.81" to "The Polish Pass: Fixed DataStore async cursor jumping in Settings. Made chart tooltips sticky to avoid thumb occlusion. Added explicit suspension delay to ensure OTA backup success toast is visible before installation.",
@@ -909,7 +910,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "v4.83"
+                                            val currentVersion = "4.9"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -944,7 +945,7 @@ fun SettingsScreen(
                                                                             context.contentResolver,
                                                                             docUri,
                                                                             "application/octet-stream",
-                                                                            "gryzor_autobackup_${LocalDate.now()}_$currentVersion.db"
+                                                                            "gryzor_autobackup_${LocalDate.now()}_v$currentVersion.db"
                                                                         )
 
                                                                         if (backupUri != null) {
@@ -996,7 +997,7 @@ fun SettingsScreen(
 
                                             } else {
                                                 withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "Up to date ($currentVersion)", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, "Up to date (v$currentVersion)", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         } else {
@@ -1051,7 +1052,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.83",
+                        text = "v4.9",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )
