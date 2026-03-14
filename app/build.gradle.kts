@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 36
 
-        // --- V4.9 DEPLOYMENT BUMP ---
-        versionCode = 33
-        versionName = "4.9"
+        // --- V5.0 DEPLOYMENT BUMP ---
+        versionCode = 34
+        versionName = "5.0"
         // ----------------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

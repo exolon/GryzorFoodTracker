@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,19 +25,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -629,6 +637,7 @@ fun MealCard(
     }
 }
 
+// --- V4.91 FIXED: KEYBOARD AUTO-FOCUS ---
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddMealDialog(
@@ -644,6 +653,8 @@ fun AddMealDialog(
     onSave: (String, String, String) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
 
     var mealText by remember { mutableStateOf(initialDesc ?: existingMeal?.description ?: "") }
     var selectedMealType by remember { mutableStateOf(initialType ?: existingMeal?.type ?: "Lunch") }
@@ -669,6 +680,17 @@ fun AddMealDialog(
         it.contains(mealText, ignoreCase = true) &&
                 it != mealText &&
                 !bannedSuggestions.contains(it)
+    }
+
+    // THE FIX: Trigger keyboard auto-open the moment the dialog appears
+    LaunchedEffect(Unit) {
+        delay(100) // Brief pause to let the UI mount
+        try {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        } catch (e: Exception) {
+            // fail silently if focus is blocked by OS
+        }
     }
 
     if (suggestionToBan != null) {
@@ -713,6 +735,7 @@ fun AddMealDialog(
     AlertDialog(
         onDismissRequest = {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            keyboardController?.hide()
             onDismiss()
         },
         modifier = Modifier
@@ -802,9 +825,24 @@ fun AddMealDialog(
                     placeholder = {
                         Text(text = "What are we logging?")
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester), // Wired up the focus anchor
                     shape = RoundedCornerShape(16.dp),
-                    minLines = 3
+                    minLines = 3,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (mealText.isNotBlank()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                keyboardController?.hide()
+                                onSave(mealTime, selectedMealType, mealText)
+                            }
+                        }
+                    )
                 )
 
                 if (filteredSuggestions.isNotEmpty()) {
@@ -853,6 +891,7 @@ fun AddMealDialog(
                     TextButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            keyboardController?.hide()
                             onDismiss()
                         }
                     ) {
@@ -867,6 +906,7 @@ fun AddMealDialog(
                         onClick = {
                             if (mealText.isNotBlank()) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                keyboardController?.hide()
                                 onSave(mealTime, selectedMealType, mealText)
                             }
                         },

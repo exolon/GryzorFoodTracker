@@ -37,15 +37,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -247,105 +244,68 @@ fun FoodTrackerScreen(
         )
     }
 
-    val appScale by animateFloatAsState(
-        targetValue = if (showAddDialog) 0.94f else 1f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 200f),
-        label = "scale"
-    )
-    val appBlur by animateDpAsState(
-        targetValue = if (showAddDialog) 16.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 200f),
-        label = "blur"
-    )
-
     val headerTagsStr = currentDayTags?.tags ?: ""
     val headerTagsList = headerTagsStr.split(",").map { it.trim() }.filter { it.isNotBlank() }
 
     val headerFriction = headerTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
     val headerSleep = headerTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
-    // --- V4.9 AMBIENT STATE AURA LOGIC ---
+    // --- V4.91 TRULY BREATHING AMBIENT AURA LOGIC ---
     val isStressed = headerFriction >= 4 || (headerSleep in 1..2)
     val primaryColor = MaterialTheme.colorScheme.primary
     val errorColor = MaterialTheme.colorScheme.error
-    val secondaryColor = MaterialTheme.colorScheme.secondary
     val backgroundColor = MaterialTheme.colorScheme.background
 
-    val targetAuraColor = if (isStressed) errorColor.copy(alpha = 0.15f) else primaryColor.copy(alpha = 0.1f)
-    val targetAuraSecondary = if (isStressed) secondaryColor.copy(alpha = 0.1f) else Color.Transparent
-
-    val animatedAuraColor by animateColorAsState(
-        targetValue = targetAuraColor,
-        animationSpec = tween(2000),
-        label = "auraColor"
-    )
-
-    val animatedAuraSecondary by animateColorAsState(
-        targetValue = targetAuraSecondary,
-        animationSpec = tween(2000),
-        label = "auraSecondary"
-    )
-
     val infiniteTransition = rememberInfiniteTransition(label = "ambientBreathe")
-    val breathingScale by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.1f,
+    // By animating a generic float, we can control BOTH scale and alpha simultaneously
+    val breathPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isStressed) 2500 else 5000, easing = LinearEasing),
+            animation = tween(if (isStressed) 1800 else 4000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse"
+        label = "breathPhase"
     )
+
+    // Calculate actual pulsing opacities
+    val baseAlpha = if (isStressed) 0.15f else 0.05f
+    val peakAlpha = if (isStressed) 0.45f else 0.20f
+    val currentAlpha = baseAlpha + (peakAlpha - baseAlpha) * breathPhase
+
+    val baseScale = 0.9f
+    val peakScale = 1.15f
+    val currentScale = baseScale + (peakScale - baseScale) * breathPhase
+
+    val activeColor = if (isStressed) errorColor else primaryColor
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .imePadding() // V4.9: Master container responds to keyboard
+            .imePadding() // Master container respects keyboard
     ) {
-        // AMBIENT AURA CANVAS
-        Canvas(modifier = Modifier.fillMaxSize().alpha(if (showAddDialog) 0.5f else 1f)) {
-            val center1 = androidx.compose.ui.geometry.Offset(size.width * 0.2f, size.height * 0.2f)
-            val center2 = androidx.compose.ui.geometry.Offset(size.width * 0.8f, size.height * 0.7f)
-            val radius = size.width * 0.7f * breathingScale
+        // TRULY BREATHING AURA CANVAS
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            // Push center slightly up so it sits nicely behind the main content
+            val center = Offset(size.width / 2f, size.height * 0.4f)
+            val radius = size.height * 0.6f * currentScale
 
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(animatedAuraColor, Color.Transparent),
-                    center = center1,
+                    colors = listOf(activeColor.copy(alpha = currentAlpha), Color.Transparent),
+                    center = center,
                     radius = radius
                 ),
                 radius = radius,
-                center = center1
-            )
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(animatedAuraSecondary, Color.Transparent),
-                    center = center2,
-                    radius = radius * 1.2f
-                ),
-                radius = radius * 1.2f,
-                center = center2
+                center = center
             )
         }
 
         Scaffold(
-            modifier = Modifier
-                .scale(appScale)
-                .graphicsLayer {
-                    clip = true
-                    shape = RoundedCornerShape(if (showAddDialog) 32.dp else 0.dp)
-                }
-                .blur(
-                    radius = appBlur,
-                    edgeTreatment = BlurredEdgeTreatment.Unbounded
-                )
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             containerColor = Color.Transparent, // Let the aura bleed through
-            snackbarHost = {
-                SnackbarHost(hostState = snackbarHostState)
-            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 LargeDayHeader(
                     date = currentDate,
@@ -382,15 +342,9 @@ fun FoodTrackerScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
-                    onBehaviorClick = {
-                        navController.navigate("behavior")
-                    },
-                    onAnalyticsClick = {
-                        navController.navigate("analytics")
-                    },
-                    onSettingsClick = {
-                        navController.navigate("settings")
-                    },
+                    onBehaviorClick = { navController.navigate("behavior") },
+                    onAnalyticsClick = { navController.navigate("analytics") },
+                    onSettingsClick = { navController.navigate("settings") },
                     onPrev = {
                         coroutineScope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage - 1)
@@ -821,7 +775,7 @@ fun FoodTrackerScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(top = 16.dp)
-                                            .bringIntoViewRequester(summaryCardRequester), // V4.9 Auto-Scroll Anchor
+                                            .bringIntoViewRequester(summaryCardRequester), // Auto-Scroll Anchor
                                         shape = RoundedCornerShape(24.dp),
                                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                                         border = BorderStroke(
@@ -1113,80 +1067,54 @@ fun FoodTrackerScreen(
             }
         }
 
-        // V4.9 Liquid Spring Navigation overlay
-        AnimatedVisibility(
-            visible = showAddDialog,
-            enter = scaleIn(
-                initialScale = 0.8f,
-                transformOrigin = TransformOrigin(0.5f, 0.5f),
-                animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f) // Liquid Pop
-            ) + fadeIn(tween(300)),
-            exit = scaleOut(
-                targetScale = 0.8f,
-                transformOrigin = TransformOrigin(0.5f, 0.5f),
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
-            ) + fadeOut(tween(200)),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .pointerInput(Unit) {
-                        detectTapGestures {
-                            showAddDialog = false
+        // Standard Compose call to your dialog file.
+        // We need to inject the keyboard logic inside AddMealDialog.kt
+        if (showAddDialog) {
+            AddMealDialog(
+                existingMeal = editingMeal ?: duplicatingMeal,
+                initialType = initialDialogMealType,
+                initialTimeOverride = initialDialogTime,
+                initialDesc = initialDialogDesc,
+                isDuplicating = duplicatingMeal != null,
+                bannedSuggestions = bannedSuggestions,
+                onBanSuggestion = { bannedText ->
+                    coroutineScope.launch {
+                        context.dataStore.edit { prefs ->
+                            val current = prefs[BANNED_SUGGESTIONS_KEY] ?: emptySet()
+                            val updatedSet = HashSet(current)
+                            updatedSet.add(bannedText)
+                            prefs[BANNED_SUGGESTIONS_KEY] = updatedSet
                         }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(modifier = Modifier.pointerInput(Unit) { detectTapGestures {} }) {
-                    AddMealDialog(
-                        existingMeal = editingMeal ?: duplicatingMeal,
-                        initialType = initialDialogMealType,
-                        initialTimeOverride = initialDialogTime,
-                        initialDesc = initialDialogDesc,
-                        isDuplicating = duplicatingMeal != null,
-                        bannedSuggestions = bannedSuggestions,
-                        onBanSuggestion = { bannedText ->
-                            coroutineScope.launch {
-                                context.dataStore.edit { prefs ->
-                                    val current = prefs[BANNED_SUGGESTIONS_KEY] ?: emptySet()
-                                    val updatedSet = HashSet(current)
-                                    updatedSet.add(bannedText)
-                                    prefs[BANNED_SUGGESTIONS_KEY] = updatedSet
-                                }
-                            }
-                        },
-                        dao = dao,
-                        onDismiss = { showAddDialog = false },
-                        onSave = { timeNow, selectedType, text ->
-                            coroutineScope.launch(Dispatchers.IO) {
-                                if (editingMeal != null) {
-                                    dao.updateMeal(
-                                        editingMeal!!.copy(
-                                            time = timeNow,
-                                            type = selectedType,
-                                            description = text
-                                        )
-                                    )
-                                } else {
-                                    dao.insertMeal(
-                                        MealEntity(
-                                            id = UUID.randomUUID().toString(),
-                                            date = currentDate.toString(),
-                                            time = timeNow,
-                                            type = selectedType,
-                                            description = text
-                                        )
-                                    )
-                                }
-                                MacroWidget().updateAll(context)
-                            }
-                            showAddDialog = false
+                    }
+                },
+                dao = dao,
+                onDismiss = { showAddDialog = false },
+                onSave = { timeNow, selectedType, text ->
+                    coroutineScope.launch(Dispatchers.IO) {
+                        if (editingMeal != null) {
+                            dao.updateMeal(
+                                editingMeal!!.copy(
+                                    time = timeNow,
+                                    type = selectedType,
+                                    description = text
+                                )
+                            )
+                        } else {
+                            dao.insertMeal(
+                                MealEntity(
+                                    id = UUID.randomUUID().toString(),
+                                    date = currentDate.toString(),
+                                    time = timeNow,
+                                    type = selectedType,
+                                    description = text
+                                )
+                            )
                         }
-                    )
+                        MacroWidget().updateAll(context)
+                    }
+                    showAddDialog = false
                 }
-            }
+            )
         }
     }
 }

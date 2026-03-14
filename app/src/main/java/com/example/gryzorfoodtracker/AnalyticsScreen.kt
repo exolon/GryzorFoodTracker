@@ -27,9 +27,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -179,34 +178,6 @@ fun AnalyticsScreen(
         }.sortedByDescending { it.totalDays }
     }
 
-    val exportPdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
-        if (uri != null) {
-            coroutineScope.launch(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        generateExecutiveSummaryPdf(
-                            outputStream,
-                            phasePreference,
-                            curKcalAvg,
-                            curDefAvg,
-                            tagStats,
-                            last14Days,
-                            allMetrics,
-                            allMeasurements
-                        )
-                    }
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Executive Summary Saved!", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Failed to generate PDF", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         entrance.animateTo(
@@ -284,15 +255,23 @@ fun AnalyticsScreen(
                     }
                 },
                 actions = {
+                    // V5.0: The Executive Print Bridge
                     IconButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            exportPdfLauncher.launch("Gryzor_Summary_${LocalDate.now()}.pdf")
+                            coroutineScope.launch {
+                                generateAndPrintReport(
+                                    context = context,
+                                    dao = dao,
+                                    phasePreference = phasePreference,
+                                    customTags = customTags
+                                )
+                            }
                         }
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Assessment,
-                            contentDescription = "Export PDF Report"
+                            contentDescription = "Print Executive Summary"
                         )
                     }
                 },
@@ -451,9 +430,11 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 2. CONSISTENCY HEATMAP (V4.9 BIOLUMINESCENT GLOW) ---
+            // --- 2. CONSISTENCY HEATMAP ---
             item {
                 val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+
+                val primaryColorTheme = MaterialTheme.colorScheme.primary
 
                 Column(modifier = elasticMod(1).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -538,20 +519,20 @@ fun AnalyticsScreen(
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             navController.previousBackStackEntry?.savedStateHandle?.set("targetDate", date)
                                             navController.popBackStack()
-                                        },
-                                    contentAlignment = Alignment.Center
+                                        }
+                                        .drawBehind {
+                                            if (!isNoData && isDaySuccess) {
+                                                val glowRadius = size.width * 0.8f
+                                                drawCircle(
+                                                    brush = Brush.radialGradient(
+                                                        colors = listOf(primaryColorTheme.copy(alpha = 0.6f), Color.Transparent),
+                                                        radius = glowRadius
+                                                    ),
+                                                    radius = glowRadius
+                                                )
+                                            }
+                                        }
                                 ) {
-                                    // V4.9 Bioluminescent Under-Glow
-                                    if (!isNoData && isDaySuccess) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp) // Exceeds the 16dp bounds to spill glow outward
-                                                .blur(6.dp)
-                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), CircleShape)
-                                        )
-                                    }
-
-                                    // Base Node
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
