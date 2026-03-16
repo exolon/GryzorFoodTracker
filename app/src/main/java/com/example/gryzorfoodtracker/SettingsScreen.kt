@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -62,6 +63,7 @@ import kotlin.random.Random
 
 val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
 val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target")
+val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key") // V5.2 AI Key
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +101,10 @@ fun SettingsScreen(
         .map { it[AUTO_BACKUP_URI_KEY] ?: "" }
         .collectAsState("")
 
+    val geminiApiStr by context.dataStore.data
+        .map { it[GEMINI_API_KEY] ?: "" }
+        .collectAsState("")
+
     var newTagText by remember { mutableStateOf("") }
     var requiresRestart by remember { mutableStateOf(false) }
     var showChangelog by remember { mutableStateOf(false) }
@@ -107,6 +113,7 @@ fun SettingsScreen(
 
     var localWeightState by remember { mutableStateOf(TextFieldValue(targetWeightStr)) }
     var localFastState by remember { mutableStateOf(TextFieldValue(fastingTargetStr)) }
+    var localApiState by remember { mutableStateOf(TextFieldValue(geminiApiStr)) }
 
     LaunchedEffect(targetWeightStr) {
         if (localWeightState.text != targetWeightStr) {
@@ -122,6 +129,15 @@ fun SettingsScreen(
             localFastState = localFastState.copy(
                 text = fastingTargetStr,
                 selection = TextRange(fastingTargetStr.length)
+            )
+        }
+    }
+
+    LaunchedEffect(geminiApiStr) {
+        if (localApiState.text != geminiApiStr) {
+            localApiState = localApiState.copy(
+                text = geminiApiStr,
+                selection = TextRange(geminiApiStr.length)
             )
         }
     }
@@ -299,16 +315,17 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v5.1" to "The Predictive Back Pass: Upgraded NavHost to support Compose Navigation 2.8.0 native predictive back-swipes, giving users a continuous spatial preview when navigating between layers.",
+                        "v5.2" to "The Automation Pass: Integrated Gemini AI to automatically calculate Macros directly into the Meal text string. Added a Regex parser to dynamically sum Daily AI Totals on the summary dashboard.",
+                        "v5.1" to "The Predictive Back Pass: Upgraded NavHost to support Compose Navigation native predictive back-swipes, giving users a continuous spatial preview when navigating.",
                         "v5.0" to "The Executive Report: Built a high-fidelity HTML-to-PDF rendering engine for exporting premium, printable 30-day Tear-Sheets featuring pure SVG vector charts.",
                         "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum, Keyboard-Aware Auto-Scroll for frictionless end-of-day logging.",
-                        "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips (Deltas). Added optional Fasting Target gamification to the Daily UI.",
-                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Built OTA GitHub updater with Auto-Backup directory linking.",
-                        "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Intake VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
-                        "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags, dynamic Cognitive Load tracking, and Phase Modes (Cut/Bulk).",
-                        "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine, gesture-based entry duplication, and robust Room SQL database persistence.",
-                        "v1.0" to "Initial Release: The baseline architecture. Simple daily Macro and Deficit tracking, manual meal entry, and fundamental timeline generation."
+                        "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips.",
+                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Built OTA GitHub updater.",
+                        "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine.",
+                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Intake VIX, Fuel ROI.",
+                        "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags.",
+                        "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine.",
+                        "v1.0" to "Initial Release: The baseline architecture."
                     )
                     items(logs) { (version, notes) ->
                         Column(modifier = Modifier.padding(bottom = 16.dp)) {
@@ -370,11 +387,83 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
-            // --- APPEARANCE SECTION ---
+            // --- AI INTEGRATION SECTION (V5.2) ---
             item {
                 Column(modifier = elasticMod(0)) {
                     Row(
                         modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 0.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "AI Integrations",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = localApiState,
+                            onValueChange = { newVal ->
+                                localApiState = newVal
+                                coroutineScope.launch {
+                                    context.dataStore.edit { it[GEMINI_API_KEY] = newVal.text }
+                                }
+                            },
+                            label = { Text(text = "Gemini API Key") },
+                            placeholder = { Text(text = "Paste key to enable Auto-Macros") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation()
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .padding(top = 8.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    uriHandler.openUri("https://aistudio.google.com/app/apikey")
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Link,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Get your free API key at Google AI Studio",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- APPEARANCE SECTION ---
+            item {
+                Column(modifier = elasticMod(1)) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    Row(
+                        modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 0.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -434,7 +523,7 @@ fun SettingsScreen(
 
             // --- GOALS & PHASE SECTION ---
             item {
-                Column(modifier = elasticMod(1)) {
+                Column(modifier = elasticMod(2)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -559,7 +648,7 @@ fun SettingsScreen(
 
             // --- CONTEXT TAGS SECTION ---
             item {
-                Column(modifier = elasticMod(2)) {
+                Column(modifier = elasticMod(3)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -622,7 +711,7 @@ fun SettingsScreen(
 
             items(customTags.filter { it.isNotBlank() }.sorted()) { tag ->
                 Row(
-                    modifier = elasticMod(2)
+                    modifier = elasticMod(3)
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 6.dp)
                         .background(
@@ -660,7 +749,7 @@ fun SettingsScreen(
 
             // --- DATA MANAGEMENT SECTION ---
             item {
-                Column(modifier = elasticMod(3)) {
+                Column(modifier = elasticMod(4)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -809,7 +898,7 @@ fun SettingsScreen(
 
             // --- ABOUT & SYSTEM SECTION ---
             item {
-                Column(modifier = elasticMod(4)) {
+                Column(modifier = elasticMod(5)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -906,7 +995,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "5.1"
+                                            val currentVersion = "5.2"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1048,7 +1137,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v5.1",
+                        text = "v5.2",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

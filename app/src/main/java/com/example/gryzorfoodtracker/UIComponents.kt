@@ -44,8 +44,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -177,8 +187,8 @@ fun LargeDayHeader(
     dailyFat: String?,
     frictionScore: Int,
     onFrictionChange: (Int) -> Unit,
-    sleepScore: Int, // V4.6: SLEEP SCORE PARAMETER
-    onSleepChange: (Int) -> Unit, // V4.6: SLEEP CHANGE EVENT
+    sleepScore: Int,
+    onSleepChange: (Int) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
     onBehaviorClick: () -> Unit,
     onAnalyticsClick: () -> Unit,
@@ -214,7 +224,6 @@ fun LargeDayHeader(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // --- COGNITIVE LOAD PILL ---
                         var loadExpanded by remember { mutableStateOf(false) }
                         Box {
                             Surface(
@@ -282,7 +291,6 @@ fun LargeDayHeader(
                             }
                         }
 
-                        // --- V4.6: SLEEP QUALITY PILL ---
                         var sleepExpanded by remember { mutableStateOf(false) }
                         Box {
                             Surface(
@@ -639,7 +647,60 @@ fun MealCard(
     }
 }
 
-// --- V5.0: PREDICTIVE BACK INTEGRATION ---
+// --- V5.2: GEMINI API HTTP CALL ---
+suspend fun fetchMacros(apiKey: String, description: String): String {
+    return withContext(Dispatchers.IO) {
+        try {
+            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+
+            val prompt = "Estimate the macros for this meal: '$description'. Return ONLY a JSON object in this exact format: {\"kcal\": 350, \"p\": 20, \"f\": 15, \"c\": 30}. Do not use markdown formatting like ```json."
+            val payload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("text", prompt)
+                            })
+                        })
+                    })
+                })
+            }
+
+            connection.outputStream.use { os ->
+                val input = payload.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            if (connection.responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().readText()
+                val jsonResponse = JSONObject(response)
+                val textResult = jsonResponse.getJSONArray("candidates")
+                    .getJSONObject(0)
+                    .getJSONObject("content")
+                    .getJSONArray("parts")
+                    .getJSONObject(0)
+                    .getString("text")
+
+                val macroJson = JSONObject(textResult.trim())
+                val kcal = macroJson.optInt("kcal", 0)
+                val p = macroJson.optInt("p", 0)
+                val f = macroJson.optInt("f", 0)
+                val c = macroJson.optInt("c", 0)
+
+                " [$kcal kcal | ${p}g P | ${f}g F | ${c}g C]"
+            } else {
+                "" // Silent fail
+            }
+        } catch (e: Exception) {
+            "" // Silent fail
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddMealDialog(
@@ -654,12 +715,18 @@ fun AddMealDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String) -> Unit
 ) {
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
 
-    // Predictive Back State Tracking
     var backProgress by remember { mutableFloatStateOf(0f) }
+    var isCalculating by remember { mutableStateOf(false) }
+
+    val geminiApiStr by context.dataStore.data
+        .map { it[stringPreferencesKey("gemini_api_key")] ?: "" }
+        .collectAsState("")
 
     var mealText by remember { mutableStateOf(initialDesc ?: existingMeal?.description ?: "") }
     var selectedMealType by remember { mutableStateOf(initialType ?: existingMeal?.type ?: "Lunch") }
@@ -687,18 +754,15 @@ fun AddMealDialog(
                 !bannedSuggestions.contains(it)
     }
 
-    // Predictive Back Handler intercepting the system swipe
-    PredictiveBackHandler { progressStream ->
+    PredictiveBackHandler(enabled = !isCalculating) { progressStream ->
         try {
             progressStream.collect { backEvent ->
                 backProgress = backEvent.progress
             }
-            // Gesture committed!
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             keyboardController?.hide()
             onDismiss()
         } catch (e: CancellationException) {
-            // Gesture cancelled - snap back to full size
             backProgress = 0f
         }
     }
@@ -750,17 +814,39 @@ fun AddMealDialog(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = {
+    val executeSave = {
+        if (mealText.isNotBlank()) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             keyboardController?.hide()
-            onDismiss()
+
+            if (geminiApiStr.isNotBlank() && !mealText.contains("kcal |")) {
+                isCalculating = true
+                coroutineScope.launch {
+                    val macroAppend = fetchMacros(geminiApiStr, mealText)
+                    isCalculating = false
+                    onSave(mealTime, selectedMealType, (mealText + macroAppend).trim())
+                }
+            } else {
+                onSave(mealTime, selectedMealType, mealText.trim())
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isCalculating) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                keyboardController?.hide()
+                onDismiss()
+            }
         },
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
         properties = DialogProperties(
-            usePlatformDefaultWidth = false
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = !isCalculating,
+            dismissOnClickOutside = !isCalculating
         )
     ) {
         Surface(
@@ -768,7 +854,6 @@ fun AddMealDialog(
             tonalElevation = 6.dp,
             modifier = Modifier
                 .widthIn(max = 400.dp)
-                // Link the visual scale directly to the user's thumb movement
                 .graphicsLayer {
                     val scale = 1f - (backProgress * 0.15f)
                     scaleX = scale
@@ -791,8 +876,10 @@ fun AddMealDialog(
 
                 AssistChip(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showTimePicker = true
+                        if (!isCalculating) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            showTimePicker = true
+                        }
                     },
                     label = {
                         Text(
@@ -821,8 +908,10 @@ fun AddMealDialog(
                         FilterChip(
                             selected = selectedMealType == type,
                             onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                selectedMealType = type
+                                if (!isCalculating) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    selectedMealType = type
+                                }
                             },
                             label = {
                                 Text(text = type)
@@ -846,7 +935,7 @@ fun AddMealDialog(
                 OutlinedTextField(
                     value = mealText,
                     onValueChange = {
-                        mealText = it
+                        if (!isCalculating) mealText = it
                     },
                     placeholder = {
                         Text(text = "What are we logging?")
@@ -856,18 +945,13 @@ fun AddMealDialog(
                         .focusRequester(focusRequester),
                     shape = RoundedCornerShape(16.dp),
                     minLines = 3,
+                    enabled = !isCalculating,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Sentences,
                         imeAction = ImeAction.Done
                     ),
                     keyboardActions = KeyboardActions(
-                        onDone = {
-                            if (mealText.isNotBlank()) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                keyboardController?.hide()
-                                onSave(mealTime, selectedMealType, mealText)
-                            }
-                        }
+                        onDone = { executeSave() }
                     )
                 )
 
@@ -885,6 +969,7 @@ fun AddMealDialog(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .combinedClickable(
+                                        enabled = !isCalculating,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             mealText = suggestion
@@ -912,16 +997,25 @@ fun AddMealDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            keyboardController?.hide()
-                            onDismiss()
+                    if (isCalculating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp).padding(end = 16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        TextButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                keyboardController?.hide()
+                                onDismiss()
+                            }
+                        ) {
+                            Text(text = "Cancel")
                         }
-                    ) {
-                        Text(text = "Cancel")
                     }
 
                     Spacer(
@@ -929,23 +1023,18 @@ fun AddMealDialog(
                     )
 
                     Button(
-                        onClick = {
-                            if (mealText.isNotBlank()) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                keyboardController?.hide()
-                                onSave(mealTime, selectedMealType, mealText)
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp)
+                        onClick = executeSave,
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isCalculating
                     ) {
-                        Text(text = "Save Entry")
+                        Text(text = if (isCalculating) "Calculating AI Macros..." else "Save Entry")
                     }
                 }
             }
         }
     }
 
-    if (showTimePicker) {
+    if (showTimePicker && !isCalculating) {
         DatePickerDialog(
             onDismissRequest = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)

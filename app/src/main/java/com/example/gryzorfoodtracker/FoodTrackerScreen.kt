@@ -250,14 +250,12 @@ fun FoodTrackerScreen(
     val headerFriction = headerTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
     val headerSleep = headerTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
 
-    // --- V4.91 TRULY BREATHING AMBIENT AURA LOGIC ---
     val isStressed = headerFriction >= 4 || (headerSleep in 1..2)
     val primaryColor = MaterialTheme.colorScheme.primary
     val errorColor = MaterialTheme.colorScheme.error
     val backgroundColor = MaterialTheme.colorScheme.background
 
     val infiniteTransition = rememberInfiniteTransition(label = "ambientBreathe")
-    // By animating a generic float, we can control BOTH scale and alpha simultaneously
     val breathPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -268,7 +266,6 @@ fun FoodTrackerScreen(
         label = "breathPhase"
     )
 
-    // Calculate actual pulsing opacities
     val baseAlpha = if (isStressed) 0.15f else 0.05f
     val peakAlpha = if (isStressed) 0.45f else 0.20f
     val currentAlpha = baseAlpha + (peakAlpha - baseAlpha) * breathPhase
@@ -283,11 +280,9 @@ fun FoodTrackerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .imePadding() // Master container respects keyboard
+            .imePadding()
     ) {
-        // TRULY BREATHING AURA CANVAS
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Push center slightly up so it sits nicely behind the main content
             val center = Offset(size.width / 2f, size.height * 0.4f)
             val radius = size.height * 0.6f * currentScale
 
@@ -304,7 +299,7 @@ fun FoodTrackerScreen(
 
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-            containerColor = Color.Transparent, // Let the aura bleed through
+            containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 LargeDayHeader(
@@ -457,8 +452,24 @@ fun FoodTrackerScreen(
                 val activeTagsList = pageTags?.tags?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                 val visualTags = activeTagsList.filter { !it.startsWith("Friction:") && !it.startsWith("Sleep:") }
 
-                // V4.9: Scroll Anchor for the Keyboard
                 val summaryCardRequester = remember { BringIntoViewRequester() }
+
+                // --- V5.2 AI MACRO PARSER ---
+                var sumKcal = 0
+                var sumP = 0
+                var sumF = 0
+                var sumC = 0
+                val macroRegex = Regex("""\[(\d+)\s*kcal\s*\|\s*(\d+)g\s*P\s*\|\s*(\d+)g\s*F\s*\|\s*(\d+)g\s*C\]""")
+
+                pageEntries.forEach { entry ->
+                    val match = macroRegex.find(entry.description)
+                    if (match != null) {
+                        sumKcal += match.groupValues[1].toIntOrNull() ?: 0
+                        sumP += match.groupValues[2].toIntOrNull() ?: 0
+                        sumF += match.groupValues[3].toIntOrNull() ?: 0
+                        sumC += match.groupValues[4].toIntOrNull() ?: 0
+                    }
+                }
 
                 Column(
                     modifier = Modifier
@@ -708,7 +719,7 @@ fun FoodTrackerScreen(
                                     start = 16.dp,
                                     end = 16.dp,
                                     top = 8.dp,
-                                    bottom = 140.dp // Added extra bottom padding for smooth keyboard clearance
+                                    bottom = 140.dp
                                 )
                             ) {
                                 itemsIndexed(
@@ -775,7 +786,7 @@ fun FoodTrackerScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(top = 16.dp)
-                                            .bringIntoViewRequester(summaryCardRequester), // Auto-Scroll Anchor
+                                            .bringIntoViewRequester(summaryCardRequester),
                                         shape = RoundedCornerShape(24.dp),
                                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                                         border = BorderStroke(
@@ -848,7 +859,36 @@ fun FoodTrackerScreen(
                                                 )
                                             }
 
-                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Spacer(modifier = Modifier.height(16.dp))
+
+                                            // --- V5.2: CALCULATED AUTO-TOTALS UI ---
+                                            if (sumKcal > 0) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(bottom = 12.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(12.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = "AI Estimated Totals",
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                        Text(
+                                                            text = "$sumKcal kcal | ${sumP}g P | ${sumF}g F | ${sumC}g C",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                            }
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -1067,8 +1107,6 @@ fun FoodTrackerScreen(
             }
         }
 
-        // Standard Compose call to your dialog file.
-        // We need to inject the keyboard logic inside AddMealDialog.kt
         if (showAddDialog) {
             AddMealDialog(
                 existingMeal = editingMeal ?: duplicatingMeal,
