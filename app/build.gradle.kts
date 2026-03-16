@@ -14,8 +14,8 @@ android {
         targetSdk = 36
 
         // --- V6.0 DEPLOYMENT ---
-        versionCode = 37
-        versionName = "6.0"
+        versionCode = 38
+        versionName = "7.0"
         // -----------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -44,6 +45,13 @@ val CUSTOM_TAGS_KEY = stringSetPreferencesKey("custom_tags")
 val PHASE_MODE_KEY = stringPreferencesKey("phase_mode")
 val TARGET_WEIGHT_KEY = stringPreferencesKey("target_weight")
 val BANNED_SUGGESTIONS_KEY = stringSetPreferencesKey("banned_suggestions")
+
+// --- V7.0: RESILIENCE ENGINE KEYS ---
+val CURRENT_STREAK_KEY = intPreferencesKey("current_streak")
+val LONGEST_STREAK_KEY = intPreferencesKey("longest_streak")
+val SHIELD_COUNT_KEY = intPreferencesKey("shield_count")
+val PERFECT_DAYS_KEY = intPreferencesKey("perfect_days_count")
+val LAST_EVALUATED_DATE_KEY = stringPreferencesKey("last_evaluated_date")
 
 val DEFAULT_TAGS = setOf("Grind", "Recovery", "High Protein", "Upper Body Bias", "Rest")
 
@@ -144,7 +152,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
 
-                    // V6.0: Catching the predictive intent extras
+                    // Catching the predictive intent extras
                     var shortcutMealType by remember { mutableStateOf<String?>(intent?.getStringExtra("edit_meal_type") ?: intent?.getStringExtra("meal_type")) }
                     var shortcutMealDesc by remember { mutableStateOf<String?>(intent?.getStringExtra("edit_meal_desc")) }
 
@@ -170,7 +178,7 @@ class MainActivity : ComponentActivity() {
                                 themePreference = themePreference,
                                 navController = navController,
                                 shortcutMealType = shortcutMealType,
-                                shortcutMealDesc = shortcutMealDesc, // Pushing down to UI
+                                shortcutMealDesc = shortcutMealDesc,
                                 onShortcutHandled = {
                                     shortcutMealType = null
                                     shortcutMealDesc = null

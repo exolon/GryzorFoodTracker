@@ -191,6 +191,8 @@ fun LargeDayHeader(
     onFrictionChange: (Int) -> Unit,
     sleepScore: Int,
     onSleepChange: (Int) -> Unit,
+    currentStreak: Int = 0, // V7.0: Default to 0 for safe compilation
+    shieldCount: Int = 0,   // V7.0: Default to 0 for safe compilation
     scrollBehavior: TopAppBarScrollBehavior,
     onBehaviorClick: () -> Unit,
     onAnalyticsClick: () -> Unit,
@@ -373,6 +375,44 @@ fun LargeDayHeader(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.secondary
                     )
+
+                    // --- V7.0: STREAK & SHIELDS UI ---
+                    if (currentStreak > 0 || shieldCount > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.LocalFireDepartment,
+                                contentDescription = "Streak",
+                                tint = Color(0xFFE65100),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "$currentStreak",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFE65100),
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            (1..3).forEach { index ->
+                                Icon(
+                                    imageVector = Icons.Filled.Security,
+                                    contentDescription = "Shield",
+                                    tint = if (index <= shieldCount) Color(0xFFF5B041) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                    // ---------------------------------
 
                     if (!dailyKcal.isNullOrBlank() || !dailyDeficit.isNullOrBlank() || !dailyWeight.isNullOrBlank() || !dailyFat.isNullOrBlank()) {
                         Spacer(
@@ -743,7 +783,6 @@ suspend fun fetchMacros(context: Context, apiKey: String, description: String): 
     }
 }
 
-// --- V6.0.1: CONTEXT-AWARE COURSE CORRECTION AI CALL ---
 suspend fun fetchSalvageIdea(context: Context, apiKey: String, targetDeficit: String, phase: String, recentMeals: List<MealEntity> = emptyList()): String {
     return withContext(Dispatchers.IO) {
         try {

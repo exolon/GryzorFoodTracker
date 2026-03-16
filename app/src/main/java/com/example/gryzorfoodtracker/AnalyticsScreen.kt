@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,6 +87,12 @@ fun AnalyticsScreen(
     val customTags by context.dataStore.data
         .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
         .collectAsState(initial = DEFAULT_TAGS)
+
+    // --- V7.0: RESILIENCE ECONOMY STATE ---
+    val currentStreak by context.dataStore.data.map { it[CURRENT_STREAK_KEY] ?: 0 }.collectAsState(0)
+    val longestStreak by context.dataStore.data.map { it[LONGEST_STREAK_KEY] ?: 0 }.collectAsState(0)
+    val shieldCount by context.dataStore.data.map { it[SHIELD_COUNT_KEY] ?: 0 }.collectAsState(0)
+    val perfectDays by context.dataStore.data.map { it[PERFECT_DAYS_KEY] ?: 0 }.collectAsState(0)
 
     val (gyroPitch, gyroRoll) = rememberGyroscopeTilt()
 
@@ -233,6 +241,7 @@ fun AnalyticsScreen(
     val typeWeightDef = (100 + ((abs(displayDef).toFloat() / (abs(curDefAvg).takeIf { it > 0 } ?: 1)) * 700)).toInt().coerceIn(100, 800)
 
     var showTopCardsTooltip by remember { mutableStateOf(false) }
+    var showResilienceTooltip by remember { mutableStateOf(false) }
     var showHeatmapTooltip by remember { mutableStateOf(false) }
     var showMacroTooltip by remember { mutableStateOf(false) }
     var showCompTooltip by remember { mutableStateOf(false) }
@@ -255,7 +264,6 @@ fun AnalyticsScreen(
                     }
                 },
                 actions = {
-                    // V5.0: The Executive Print Bridge
                     IconButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -295,9 +303,165 @@ fun AnalyticsScreen(
                 .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
+            // --- V7.0: RESILIENCE ECONOMY DASHBOARD ---
+            item {
+                Column(modifier = elasticMod(0).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Resilience & Momentum",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showResilienceTooltip = !showResilienceTooltip
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.QuestionMark,
+                                contentDescription = "Info",
+                                modifier = Modifier.padding(3.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showResilienceTooltip) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp)
+                        ) {
+                            Text(
+                                text = "Every 6 consecutive successful days earns 1 Shield (max 3). If you miss a target, a shield is consumed to protect your streak. This provides strategic psychological slack to prevent habit abandonment.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Card 1: Shield Economy
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Current Armor",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row {
+                                        (1..3).forEach { index ->
+                                            Icon(
+                                                imageVector = Icons.Filled.Security,
+                                                contentDescription = "Shield",
+                                                tint = if (index <= shieldCount) Color(0xFFF5B041) else MaterialTheme.colorScheme.surfaceVariant,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            if (index < 3) Spacer(modifier = Modifier.width(4.dp))
+                                        }
+                                    }
+                                    if (shieldCount == 3) {
+                                        Text(
+                                            text = "MAX",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFF5B041),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "$perfectDays/6 to next",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                                if (shieldCount < 3) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LinearProgressIndicator(
+                                        progress = { perfectDays / 6f },
+                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                        color = Color(0xFFF5B041),
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        // Card 2: Streak Momentum
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Momentum",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Icon(
+                                        imageVector = Icons.Filled.LocalFireDepartment,
+                                        contentDescription = "Streak",
+                                        tint = if (currentStreak > 0) Color(0xFFE65100) else MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.size(28.dp).offset(y = (-4).dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "$currentStreak",
+                                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (currentStreak > 0) Color(0xFFE65100) else MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "days",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.offset(y = (-6).dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Record: $longestStreak",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // --- 1. TOP METRIC CARDS ---
             item {
-                Column(modifier = elasticMod(0).fillMaxWidth().padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp)) {
+                Column(modifier = elasticMod(1).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Velocity & Trajectory",
@@ -436,7 +600,7 @@ fun AnalyticsScreen(
 
                 val primaryColorTheme = MaterialTheme.colorScheme.primary
 
-                Column(modifier = elasticMod(1).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(2).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Consistency Heatmap",
@@ -575,7 +739,7 @@ fun AnalyticsScreen(
                 var showSignalOverlay by remember { mutableStateOf(false) }
                 var lastMacroHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(modifier = elasticMod(2).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -976,7 +1140,7 @@ fun AnalyticsScreen(
                 var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
                 var lastCompHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Body Composition Trend",
@@ -1241,7 +1405,7 @@ fun AnalyticsScreen(
                 var showTooltip by remember { mutableStateOf(false) }
 
                 if (tagStats.isNotEmpty()) {
-                    Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
+                    Column(modifier = elasticMod(5).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Behavioral Compliance Matrix",

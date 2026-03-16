@@ -64,6 +64,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,7 +124,7 @@ fun FoodTrackerScreen(
     themePreference: String,
     navController: NavController,
     shortcutMealType: String? = null,
-    shortcutMealDesc: String? = null, // V6.0 Addition
+    shortcutMealDesc: String? = null,
     onShortcutHandled: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -185,6 +186,88 @@ fun FoodTrackerScreen(
     val geminiApiStr by context.dataStore.data.map { it[GEMINI_API_KEY] ?: "" }.collectAsState("")
     val phasePreference by context.dataStore.data.map { it[PHASE_MODE_KEY] ?: "cut" }.collectAsState("cut")
 
+    // --- V7.0: RESILIENCE ENGINE STATE ---
+    val currentStreak by context.dataStore.data.map { it[CURRENT_STREAK_KEY] ?: 0 }.collectAsState(0)
+    val shieldCount by context.dataStore.data.map { it[SHIELD_COUNT_KEY] ?: 0 }.collectAsState(0)
+    val lastEvaluatedDateStr by context.dataStore.data.map { it[LAST_EVALUATED_DATE_KEY] ?: "" }.collectAsState("")
+
+    // --- V7.0: THE ADJUDICATOR ---
+    LaunchedEffect(lastEvaluatedDateStr, phasePreference) {
+        withContext(Dispatchers.IO) {
+            val today = LocalDate.now()
+            val yesterday = today.minusDays(1)
+
+            val lastEval = if (lastEvaluatedDateStr.isNotBlank()) {
+                LocalDate.parse(lastEvaluatedDateStr)
+            } else {
+                yesterday // Start fresh if never evaluated before
+            }
+
+            if (lastEval.isBefore(yesterday)) {
+                val prefs = context.dataStore.data.first()
+                var currStreak = prefs[CURRENT_STREAK_KEY] ?: 0
+                var shields = prefs[SHIELD_COUNT_KEY] ?: 0
+                var perfects = prefs[PERFECT_DAYS_KEY] ?: 0
+                var longest = prefs[LONGEST_STREAK_KEY] ?: 0
+
+                var evalDate = lastEval.plusDays(1)
+
+                while (!evalDate.isAfter(yesterday)) {
+                    val metric = dao.getMetricsForDate(evalDate.toString()).first()
+                    val defVal = metric?.deficit?.toFloatOrNull()
+
+                    if (defVal != null) {
+                        val isSuccess = if (phasePreference == "cut") defVal < 0f else defVal > 0f
+
+                        if (isSuccess) {
+                            currStreak++
+                            perfects++
+                            if (perfects >= 6) { // 6 days earns 1 Shield
+                                shields = minOf(3, shields + 1) // Hard cap of 3
+                                perfects = 0
+                            }
+                            if (currStreak > longest) longest = currStreak
+                        } else {
+                            if (shields > 0) {
+                                shields--
+                                currStreak++ // Streak protected!
+                                if (currStreak > longest) longest = currStreak
+                            } else {
+                                currStreak = 0 // Streak broken
+                                perfects = 0
+                            }
+                        }
+                    } else {
+                        // User forgot to log
+                        if (shields > 0) {
+                            shields--
+                            currStreak++ // Shield deployed for a missed day
+                            if (currStreak > longest) longest = currStreak
+                        } else {
+                            currStreak = 0
+                            perfects = 0
+                        }
+                    }
+                    evalDate = evalDate.plusDays(1)
+                }
+
+                // Save the new economy back to DataStore
+                context.dataStore.edit { editPrefs ->
+                    editPrefs[CURRENT_STREAK_KEY] = currStreak
+                    editPrefs[SHIELD_COUNT_KEY] = shields
+                    editPrefs[PERFECT_DAYS_KEY] = perfects
+                    editPrefs[LONGEST_STREAK_KEY] = longest
+                    editPrefs[LAST_EVALUATED_DATE_KEY] = yesterday.toString()
+                }
+            } else if (lastEvaluatedDateStr.isBlank()) {
+                // Initialize the ledger
+                context.dataStore.edit { editPrefs ->
+                    editPrefs[LAST_EVALUATED_DATE_KEY] = yesterday.toString()
+                }
+            }
+        }
+    }
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -231,7 +314,7 @@ fun FoodTrackerScreen(
         if (shortcutMealType != null && !handledShortcut) {
             initialDialogMealType = shortcutMealType
             initialDialogTime = null
-            initialDialogDesc = shortcutMealDesc // V6.0 Addition
+            initialDialogDesc = shortcutMealDesc
             editingMeal = null
             duplicatingMeal = null
             showAddDialog = true
@@ -340,6 +423,8 @@ fun FoodTrackerScreen(
                             MacroWidget().updateAll(context)
                         }
                     },
+                    currentStreak = currentStreak, // V7.0
+                    shieldCount = shieldCount,     // V7.0
                     scrollBehavior = scrollBehavior,
                     onBehaviorClick = { navController.navigate("behavior") },
                     onAnalyticsClick = { navController.navigate("analytics") },
@@ -892,7 +977,6 @@ fun FoodTrackerScreen(
                                                 }
                                             }
 
-                                            // --- V6.0: SALVAGE MY DAY ENGINE (Now Context Aware) ---
                                             val defVal = deficit.toFloatOrNull() ?: 0f
                                             val isStruggling = if (phasePreference == "cut") defVal < 0f else defVal > 0f
 
@@ -908,7 +992,6 @@ fun FoodTrackerScreen(
                                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                             isSalvaging = true
                                                             coroutineScope.launch {
-                                                                // Pass the pageEntries to provide diet context
                                                                 val idea = fetchSalvageIdea(context, geminiApiStr, deficit, phasePreference, pageEntries)
                                                                 isSalvaging = false
                                                                 if (idea.isNotBlank()) {
