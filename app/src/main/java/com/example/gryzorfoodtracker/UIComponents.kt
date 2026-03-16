@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
@@ -637,7 +639,7 @@ fun MealCard(
     }
 }
 
-// --- V4.91 FIXED: KEYBOARD AUTO-FOCUS ---
+// --- V5.0: PREDICTIVE BACK INTEGRATION ---
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddMealDialog(
@@ -655,6 +657,9 @@ fun AddMealDialog(
     val haptic = LocalHapticFeedback.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+
+    // Predictive Back State Tracking
+    var backProgress by remember { mutableFloatStateOf(0f) }
 
     var mealText by remember { mutableStateOf(initialDesc ?: existingMeal?.description ?: "") }
     var selectedMealType by remember { mutableStateOf(initialType ?: existingMeal?.type ?: "Lunch") }
@@ -682,15 +687,28 @@ fun AddMealDialog(
                 !bannedSuggestions.contains(it)
     }
 
-    // THE FIX: Trigger keyboard auto-open the moment the dialog appears
+    // Predictive Back Handler intercepting the system swipe
+    PredictiveBackHandler { progressStream ->
+        try {
+            progressStream.collect { backEvent ->
+                backProgress = backEvent.progress
+            }
+            // Gesture committed!
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            keyboardController?.hide()
+            onDismiss()
+        } catch (e: CancellationException) {
+            // Gesture cancelled - snap back to full size
+            backProgress = 0f
+        }
+    }
+
     LaunchedEffect(Unit) {
-        delay(100) // Brief pause to let the UI mount
+        delay(100)
         try {
             focusRequester.requestFocus()
             keyboardController?.show()
-        } catch (e: Exception) {
-            // fail silently if focus is blocked by OS
-        }
+        } catch (e: Exception) {}
     }
 
     if (suggestionToBan != null) {
@@ -748,7 +766,15 @@ fun AddMealDialog(
         Surface(
             shape = RoundedCornerShape(32.dp),
             tonalElevation = 6.dp,
-            modifier = Modifier.widthIn(max = 400.dp)
+            modifier = Modifier
+                .widthIn(max = 400.dp)
+                // Link the visual scale directly to the user's thumb movement
+                .graphicsLayer {
+                    val scale = 1f - (backProgress * 0.15f)
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = 1f - (backProgress * 0.5f)
+                }
         ) {
             Column(
                 modifier = Modifier.padding(24.dp)
@@ -827,7 +853,7 @@ fun AddMealDialog(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(focusRequester), // Wired up the focus anchor
+                        .focusRequester(focusRequester),
                     shape = RoundedCornerShape(16.dp),
                     minLines = 3,
                     keyboardOptions = KeyboardOptions(

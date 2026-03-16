@@ -14,8 +14,8 @@ android {
         targetSdk = 36
 
         // --- V5.0 DEPLOYMENT BUMP ---
-        versionCode = 34
-        versionName = "5.0"
+        versionCode = 35
+        versionName = "5.1"
         // ----------------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -62,7 +62,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // Navigation Compose
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.navigation:navigation-compose:2.8.0")
 
     // Room Database
     val room_version = "2.6.1"

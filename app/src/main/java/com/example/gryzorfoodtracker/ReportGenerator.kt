@@ -20,8 +20,8 @@ suspend fun generateAndPrintReport(
     val htmlContent = withContext(Dispatchers.IO) {
         val today = LocalDate.now()
         val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+        val chronologicalDays = last30Days.reversed() // For graphing left-to-right
 
-        // V5.0 FIXED: Safely unwrapping Flow<T> to a static snapshot using .first()
         val metricsMap = last30Days.associateWith { dao.getMetricsForDate(it).first() }
         val measurementsMap = last30Days.associateWith { dao.getMeasurementForDate(it).first() }
         val tagsMap = last30Days.associateWith { dao.getTagsForDate(it).first() }
@@ -41,6 +41,106 @@ suspend fun generateAndPrintReport(
         val endWeight = measurementsMap.values.filterNotNull().maxByOrNull { it.date }?.weight?.toFloatOrNull()
         val weightDelta = if (startWeight != null && endWeight != null) endWeight - startWeight else null
 
+        // --- EXTRACT DATA FOR VECTOR GRAPHS ---
+        val kcalData = chronologicalDays.map { metricsMap[it]?.totalKcal?.toFloatOrNull() }
+        val defData = chronologicalDays.map { metricsMap[it]?.deficit?.toFloatOrNull() }
+        val weightData = chronologicalDays.map { measurementsMap[it]?.weight?.toFloatOrNull() }
+        val fatData = chronologicalDays.map { measurementsMap[it]?.bodyFat?.toFloatOrNull() }
+
+        val loadData = chronologicalDays.map { date ->
+            tagsMap[date]?.tags?.split(",")?.find { it.trim().startsWith("Friction:") }?.substringAfter(":")?.trim()?.toFloatOrNull()
+        }
+        val sleepData = chronologicalDays.map { date ->
+            tagsMap[date]?.tags?.split(",")?.find { it.trim().startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toFloatOrNull()
+        }
+
+        // --- PURE KOTLIN SVG BUILDER ---
+        fun buildSvgGraph(
+            data1: List<Float?>, color1: String, name1: String,
+            data2: List<Float?>? = null, color2: String? = null, name2: String? = null,
+            fixed0To5: Boolean = false
+        ): String {
+            val width = 800f
+            val height = 220f
+            val padX = 20f
+            val padY = 40f
+            val w = width - 2 * padX
+            val h = height - 2 * padY
+
+            var svg = """<svg viewBox="0 0 $width $height" style="width: 100%; height: auto; background: #fff; border-radius: 12px; border: 1px solid #eaeaea;">"""
+
+            // Gridlines
+            svg += """<line x1="$padX" y1="${padY}" x2="${padX+w}" y2="${padY}" stroke="#f4f4f4" stroke-width="1"/>"""
+            svg += """<line x1="$padX" y1="${padY+h/2}" x2="${padX+w}" y2="${padY+h/2}" stroke="#f4f4f4" stroke-width="1"/>"""
+            svg += """<line x1="$padX" y1="${padY+h}" x2="${padX+w}" y2="${padY+h}" stroke="#f4f4f4" stroke-width="1"/>"""
+
+            fun getPath(data: List<Float?>, color: String, isArea: Boolean): String {
+                val nonNulls = data.filterNotNull()
+                if (nonNulls.isEmpty()) return ""
+
+                val min = if (fixed0To5) 0f else nonNulls.minOrNull() ?: 0f
+                val max = if (fixed0To5) 5f else nonNulls.maxOrNull() ?: 1f
+                val range = if (max == min) 1f else max - min
+
+                var d = ""
+                val step = w / (data.size - 1).coerceAtLeast(1)
+                var first = true
+                var startX = 0f
+                var lastX = 0f
+
+                var circles = ""
+
+                for (i in data.indices) {
+                    val v = data[i]
+                    if (v != null) {
+                        val x = padX + i * step
+                        val y = padY + h - ((v - min) / range * h)
+                        if (first) {
+                            d += "M $x $y "
+                            startX = x
+                            first = false
+                        } else {
+                            d += "L $x $y "
+                        }
+                        lastX = x
+                        circles += """<circle cx="$x" cy="$y" r="4" fill="#fff" stroke="$color" stroke-width="2"/>"""
+                    }
+                }
+
+                var result = ""
+                if (!first) {
+                    if (isArea) {
+                        val areaD = d + "L $lastX ${padY+h} L $startX ${padY+h} Z"
+                        result += """<path d="$areaD" fill="$color" fill-opacity="0.1"/>"""
+                    }
+                    result += """<path d="$d" fill="none" stroke="$color" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>"""
+                    result += circles
+                }
+                return result
+            }
+
+            if (data2 != null && color2 != null) {
+                svg += getPath(data2, color2, false)
+            }
+            svg += getPath(data1, color1, true)
+
+            // Legend
+            svg += """<rect x="${padX}" y="15" width="12" height="12" rx="3" fill="$color1"/>"""
+            svg += """<text x="${padX+20}" y="25" font-family="sans-serif" font-size="12" font-weight="bold" fill="#333">$name1</text>"""
+
+            if (name2 != null && color2 != null) {
+                svg += """<rect x="${padX+120}" y="15" width="12" height="12" rx="3" fill="$color2"/>"""
+                svg += """<text x="${padX+140}" y="25" font-family="sans-serif" font-size="12" font-weight="bold" fill="#333">$name2</text>"""
+            }
+
+            svg += "</svg>"
+            return svg
+        }
+
+        val macroSvg = buildSvgGraph(kcalData, "#005A9C", "Total Intake", defData, "#D93025", "Deficit/Surplus")
+        val compSvg = buildSvgGraph(weightData, "#005A9C", "Weight (kg)", fatData, "#F0A500", "Body Fat (%)")
+        val behaviorSvg = buildSvgGraph(loadData, "#D93025", "Cognitive Load", sleepData, "#005A9C", "Sleep Quality", fixed0To5 = true)
+
         val sb = StringBuilder()
 
         sb.append("""
@@ -57,24 +157,31 @@ suspend fun generateAndPrintReport(
                     .header h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
                     .header p { color: #666; font-size: 14px; margin-top: 4px; }
                     
-                    .hero-grid { display: flex; gap: 20px; margin-bottom: 40px; }
-                    .hero-card { flex: 1; background: #fff; padding: 24px; border-radius: 16px; border: 1px solid #eaeaea; text-align: center; }
+                    .hero-grid { display: flex; gap: 20px; margin-bottom: 30px; }
+                    .hero-card { flex: 1; background: #fff; padding: 24px; border-radius: 12px; border: 1px solid #eaeaea; text-align: center; }
                     .hero-card.success { border-bottom: 4px solid #2E7D32; }
                     .hero-card p { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 8px; }
                     .hero-card h2 { font-size: 32px; font-weight: 800; color: #111; }
                     
-                    .day-block { background: #fff; border-radius: 16px; border: 1px solid #eaeaea; padding: 24px; margin-bottom: 24px; page-break-inside: avoid; }
-                    .day-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; }
+                    .chart-title { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; margin-bottom: 8px; }
+                    .chart-row { display: flex; gap: 20px; margin-bottom: 20px; }
+                    .chart-col { flex: 1; }
+                    .chart-full { margin-bottom: 40px; page-break-after: always; }
+                    
+                    /* Smart Page Breaks */
+                    .day-block { background: #fff; border-radius: 12px; border: 1px solid #eaeaea; padding: 20px; margin-bottom: 20px; }
+                    .day-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; page-break-after: avoid; }
                     .day-date { font-weight: 800; font-size: 18px; }
                     .day-tags { font-size: 12px; background: #f0f5f0; color: #2E7D32; padding: 4px 10px; border-radius: 12px; font-weight: 600; }
                     
-                    .macros { display: flex; gap: 16px; margin-bottom: 16px; }
+                    .macros { display: flex; gap: 16px; margin-bottom: 16px; page-break-inside: avoid; }
                     .macro-item { font-size: 14px; color: #444; }
                     .macro-item strong { color: #111; }
                     
-                    .insight { background: #f8f9fa; border-left: 4px solid #6c757d; padding: 12px 16px; font-size: 14px; color: #555; margin-bottom: 16px; border-radius: 0 8px 8px 0; font-style: italic; }
+                    .insight { background: #f8f9fa; border-left: 4px solid #6c757d; padding: 12px 16px; font-size: 14px; color: #555; margin-bottom: 16px; border-radius: 0 8px 8px 0; font-style: italic; page-break-inside: avoid; }
                     
                     table { width: 100%; border-collapse: collapse; font-size: 13px; }
+                    tr { page-break-inside: avoid; }
                     th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; }
                     th { font-weight: 600; color: #888; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
                     tr:last-child td { border-bottom: none; }
@@ -85,6 +192,7 @@ suspend fun generateAndPrintReport(
             <body>
         """.trimIndent())
 
+        // HEADER
         sb.append("""
             <div class="header">
                 <h1>Executive Summary</h1>
@@ -92,6 +200,7 @@ suspend fun generateAndPrintReport(
             </div>
         """.trimIndent())
 
+        // HERO METRICS
         sb.append("""
             <div class="hero-grid">
                 <div class="hero-card success">
@@ -109,7 +218,26 @@ suspend fun generateAndPrintReport(
             </div>
         """.trimIndent())
 
-        last30Days.reversed().forEach { dateStr ->
+        // PURE SVG CHARTS GRID (Page 1)
+        sb.append("""
+            <div class="chart-row">
+                <div class="chart-col">
+                    <div class="chart-title">Macro Trajectory</div>
+                    $macroSvg
+                </div>
+                <div class="chart-col">
+                    <div class="chart-title">Body Composition</div>
+                    $compSvg
+                </div>
+            </div>
+            <div class="chart-full">
+                <div class="chart-title">System Friction vs. Sleep Quality</div>
+                $behaviorSvg
+            </div>
+        """.trimIndent())
+
+        // THE LOG DIARY (Pages 2+)
+        last30Days.forEach { dateStr ->
             val meals = mealsMap[dateStr]
             val metrics = metricsMap[dateStr]
             val insight = insightsMap[dateStr]

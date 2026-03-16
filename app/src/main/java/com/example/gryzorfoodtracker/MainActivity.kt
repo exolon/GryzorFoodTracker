@@ -4,6 +4,13 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -112,7 +119,23 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     var shortcutMealType by remember { mutableStateOf<String?>(intent?.getStringExtra("meal_type")) }
 
-                    NavHost(navController = navController, startDestination = "home") {
+                    NavHost(
+                        navController = navController,
+                        startDestination = "home",
+                        // V5.1: Navigation Transitions for Predictive Back
+                        enterTransition = {
+                            slideInHorizontally(animationSpec = tween(300)) { it } + fadeIn(animationSpec = tween(300))
+                        },
+                        exitTransition = {
+                            scaleOut(targetScale = 0.9f, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+                        },
+                        popEnterTransition = {
+                            scaleIn(initialScale = 0.9f, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(animationSpec = tween(300)) { it } + fadeOut(animationSpec = tween(300))
+                        }
+                    ) {
                         composable("home") {
                             FoodTrackerScreen(
                                 db = db,

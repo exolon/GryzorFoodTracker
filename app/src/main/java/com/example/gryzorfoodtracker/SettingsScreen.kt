@@ -299,16 +299,12 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum, Keyboard-Aware Auto-Scroll for frictionless end-of-day logging, and Liquid Spring Dialog transitions.",
-                        "v4.83" to "The Installer Pass: Dynamically mapped OTA file downloads to version tags to prevent stale Android DownloadManager file collisions. Switched version comparator to float evaluation to secure future major version bumps.",
-                        "v4.82" to "The Split-Pane Pass: Segmented the Body Composition graph into distinct upper (Weight) and lower (Body Fat) bounds to prevent visual intersection of trend lines.",
-                        "v4.81" to "The Polish Pass: Fixed DataStore async cursor jumping in Settings. Made chart tooltips sticky to avoid thumb occlusion. Added explicit suspension delay to ensure OTA backup success toast is visible before installation.",
+                        "v5.1" to "The Predictive Back Pass: Upgraded NavHost to support Compose Navigation 2.8.0 native predictive back-swipes, giving users a continuous spatial preview when navigating between layers.",
+                        "v5.0" to "The Executive Report: Built a high-fidelity HTML-to-PDF rendering engine for exporting premium, printable 30-day Tear-Sheets featuring pure SVG vector charts.",
+                        "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum, Keyboard-Aware Auto-Scroll for frictionless end-of-day logging.",
                         "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips (Deltas). Added optional Fasting Target gamification to the Daily UI.",
-                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Renamed Total Kcal to Total Intake. Added Weekly P&L and Success Blueprint to the Behavioral Engine. Built OTA GitHub updater with Auto-Backup directory linking.",
+                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Built OTA GitHub updater with Auto-Backup directory linking.",
                         "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine. Upgraded Momentum to a Weighted Moving Average. Refined Burnout and Recovery Debt penalties.",
-                        "v4.5" to "The Feedback Pass: Upgraded haptics to LongPress voltage. Refined Behavioral math. Added axis labels to Analytics canvases. Built the 'Morning Intent' dashboard.",
-                        "v4.3" to "The Tactile Pass: Added ubiquitous UI haptic feedback. Transitioned default 'Fasting' tag to 'Recovery'. Built Self-Healing data matrix.",
-                        "v4.2" to "The Human Performance Pass: Added Chrono-Biology Fasting Engine, Velocity Burn-Down Forecast, Recovery Debt Ratio.",
                         "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Intake VIX, Fuel ROI, Momentum Oscillator, and Ego Depletion Matrix.",
                         "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags, dynamic Cognitive Load tracking, and Phase Modes (Cut/Bulk).",
                         "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine, gesture-based entry duplication, and robust Room SQL database persistence.",
@@ -910,7 +906,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "4.9"
+                                            val currentVersion = "5.1"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1052,7 +1048,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v4.9",
+                        text = "v5.1",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )
