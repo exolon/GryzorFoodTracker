@@ -123,6 +123,7 @@ fun FoodTrackerScreen(
     themePreference: String,
     navController: NavController,
     shortcutMealType: String? = null,
+    shortcutMealDesc: String? = null, // V6.0 Addition
     onShortcutHandled: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -178,8 +179,11 @@ fun FoodTrackerScreen(
     val currentDayMeasurement by dao.getMeasurementForDate(currentDate.toString()).collectAsState(initial = null)
 
     val availableTags by context.dataStore.data.map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }.collectAsState(DEFAULT_TAGS)
-    val bannedSuggestions by context.dataStore.data.map { it[BANNED_SUGGESTIONS_KEY] ?: emptySet() }.collectAsState(emptySet())
+    val bannedSuggestions by context.dataStore.data.map { it[BANNED_SUGGESTIONS_KEY] ?: emptySet<String>() }.collectAsState(emptySet())
     val fastingTargetStr by context.dataStore.data.map { it[FASTING_TARGET_KEY] ?: "" }.collectAsState("")
+
+    val geminiApiStr by context.dataStore.data.map { it[GEMINI_API_KEY] ?: "" }.collectAsState("")
+    val phasePreference by context.dataStore.data.map { it[PHASE_MODE_KEY] ?: "cut" }.collectAsState("cut")
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -227,7 +231,7 @@ fun FoodTrackerScreen(
         if (shortcutMealType != null && !handledShortcut) {
             initialDialogMealType = shortcutMealType
             initialDialogTime = null
-            initialDialogDesc = null
+            initialDialogDesc = shortcutMealDesc // V6.0 Addition
             editingMeal = null
             duplicatingMeal = null
             showAddDialog = true
@@ -454,7 +458,6 @@ fun FoodTrackerScreen(
 
                 val summaryCardRequester = remember { BringIntoViewRequester() }
 
-                // --- V5.2 AI MACRO PARSER ---
                 var sumKcal = 0
                 var sumP = 0
                 var sumF = 0
@@ -861,7 +864,6 @@ fun FoodTrackerScreen(
 
                                             Spacer(modifier = Modifier.height(16.dp))
 
-                                            // --- V5.2: CALCULATED AUTO-TOTALS UI ---
                                             if (sumKcal > 0) {
                                                 Surface(
                                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
@@ -886,6 +888,76 @@ fun FoodTrackerScreen(
                                                             color = MaterialTheme.colorScheme.primary,
                                                             fontWeight = FontWeight.Bold
                                                         )
+                                                    }
+                                                }
+                                            }
+
+                                            // --- V6.0: SALVAGE MY DAY ENGINE (Now Context Aware) ---
+                                            val defVal = deficit.toFloatOrNull() ?: 0f
+                                            val isStruggling = if (phasePreference == "cut") defVal < 0f else defVal > 0f
+
+                                            if (geminiApiStr.isNotBlank() && deficit.isNotBlank() && isStruggling) {
+                                                var isSalvaging by remember { mutableStateOf(false) }
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(bottom = 12.dp)
+                                                        .clickable(enabled = !isSalvaging) {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            isSalvaging = true
+                                                            coroutineScope.launch {
+                                                                // Pass the pageEntries to provide diet context
+                                                                val idea = fetchSalvageIdea(context, geminiApiStr, deficit, phasePreference, pageEntries)
+                                                                isSalvaging = false
+                                                                if (idea.isNotBlank()) {
+                                                                    val prefix = "🚨 AI Rescue Strategy:\n"
+                                                                    val newInsight = if (insightText.isBlank()) "$prefix$idea" else "$insightText\n\n$prefix$idea"
+                                                                    insightText = newInsight
+
+                                                                    withContext(Dispatchers.IO) {
+                                                                        dao.insertInsight(DailyInsightEntity(pageDate, newInsight))
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(12.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            if (isSalvaging) {
+                                                                CircularProgressIndicator(
+                                                                    modifier = Modifier.size(16.dp),
+                                                                    strokeWidth = 2.dp,
+                                                                    color = MaterialTheme.colorScheme.error
+                                                                )
+                                                            } else {
+                                                                Icon(
+                                                                    imageVector = Icons.Filled.AutoFixHigh,
+                                                                    contentDescription = null,
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                            }
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                            Text(
+                                                                text = if (isSalvaging) "Generating strategy..." else "Salvage My Day",
+                                                                style = MaterialTheme.typography.labelMedium,
+                                                                color = MaterialTheme.colorScheme.error,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                        if (!isSalvaging) {
+                                                            Text(
+                                                                text = "Tap to fix trajectory",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1118,7 +1190,7 @@ fun FoodTrackerScreen(
                 onBanSuggestion = { bannedText ->
                     coroutineScope.launch {
                         context.dataStore.edit { prefs ->
-                            val current = prefs[BANNED_SUGGESTIONS_KEY] ?: emptySet()
+                            val current = prefs[BANNED_SUGGESTIONS_KEY] ?: emptySet<String>()
                             val updatedSet = HashSet(current)
                             updatedSet.add(bannedText)
                             prefs[BANNED_SUGGESTIONS_KEY] = updatedSet

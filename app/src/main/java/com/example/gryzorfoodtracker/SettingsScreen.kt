@@ -63,7 +63,7 @@ import kotlin.random.Random
 
 val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
 val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target")
-val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key") // V5.2 AI Key
+val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -258,7 +258,7 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = { Text(text = "App Manual") },
+            title = { Text(text = "App Manual (v6)") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     item {
@@ -268,7 +268,17 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Voice Input: Hold the Mic button, say 'Snack, an apple at 4 pm', and let the AI parse the rest.\n• Gestures: Swipe a meal left to delete. Swipe right to instantly duplicate it.\n• Long-Press: Hold down a suggested meal chip to banish typos from your history.",
+                            text = "• AI Auto-Macros: Log a meal in plain text. Gemini AI will instantly calculate the macros and append them as a pill.\n• Voice Input: Hold the Mic button and speak naturally.\n• Gestures: Swipe left to delete, swipe right to duplicate. The 'Predictive Back' gesture physically scales dialogs as you swipe.\n• Typo Banishment: Long-press any suggested meal to permanently hide it.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "The Active Compass",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• Course Correction: If you exceed your target, tap the AI wand to generate a 'Salvage My Day' optimized meal suggestion based on your recent palate to pull your trajectory back into the green.\n• The Habit Loop: The app learns your meal timings and fires interactive notifications. Tap 'Log' to instantly record it, or 'Edit' to tweak the macros.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -278,17 +288,17 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Tags: Use the chip bar to flag daily conditions.\n• Morning Intent: Empty days display a dashboard to set your daily Cognitive Load and Sleep Score before logging food.",
+                            text = "• Tags: Tap the context chips to flag conditions (e.g. 'Grind', 'Recovery').\n• Morning Intent: Empty days feature a dashboard to log your Cognitive Load and Sleep Quality to establish a daily baseline.\n• Ambient Auras: The background physically 'breathes' based on your systemic stress.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Behavioral Engine",
+                            text = "Analytics & Export",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Burnout Meter: Predicts system fatigue based on deficit streaks, metabolic volatility, and compromised sleep.\n• Intake VIX: Tracks intake volatility to prevent erratic eating patterns.\n• Fuel ROI: Measures if surpluses are efficiently fueling 'Grind' days.\n• Willpower Tax: Correlates your Sleep Quality against your deficit success rate.\n• Velocity Burn-Down: Forecasts when you will hit your Target Weight based on 31-day momentum.\n• Recovery Debt Ratio: Monitors CNS fatigue by tracking the ratio of 'Grind' vs 'Rest/Recovery' tags.",
+                            text = "• Executive Report: Tap the Print icon in Analytics to generate a high-fidelity PDF Tear-Sheet featuring pure vector charting of your 30-day trajectory.\n• Trailing Signal Overlay: Drag your finger across graphs to scrub data, and toggle the 'Signal' switch to reveal the underlying 7-day weighted moving average.\n• Behavioral Matrix: Calculates your caloric success rate strictly against the context tags you apply.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -315,13 +325,14 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v5.2" to "The Automation Pass: Integrated Gemini AI to automatically calculate Macros directly into the Meal text string. Added a Regex parser to dynamically sum Daily AI Totals on the summary dashboard.",
+                        "v6.0" to "The Active Compass Pass: Transformed Gryzor into a proactive behavioral copilot. Added a 'Salvage My Day' AI magic wand to generate hyper-specific, context-aware rescue meals when deficits slip. Introduced a Predictive Habit Engine (WorkManager) that analyzes your 7-day logging patterns and sends actionable Android notifications to 1-tap log or edit your most frequent meals.",
+                        "v5.3" to "The UI Polish Pass: Converted macro strings into visual UI pills. Rebuilt AddMealDialog into a pure full-screen Compose Box to perfectly support predictive back-scaling.",
+                        "v5.2" to "The Automation Pass: Integrated Gemini AI to automatically calculate Macros directly into the Meal text string. Added a Regex parser to dynamically sum Daily AI Totals.",
                         "v5.1" to "The Predictive Back Pass: Upgraded NavHost to support Compose Navigation native predictive back-swipes, giving users a continuous spatial preview when navigating.",
                         "v5.0" to "The Executive Report: Built a high-fidelity HTML-to-PDF rendering engine for exporting premium, printable 30-day Tear-Sheets featuring pure SVG vector charts.",
-                        "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum, Keyboard-Aware Auto-Scroll for frictionless end-of-day logging.",
+                        "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum.",
                         "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips.",
                         "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Built OTA GitHub updater.",
-                        "v4.6" to "The Recovery Pass: Deeply integrated subjective Sleep Scores into the Behavioral Engine.",
                         "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Intake VIX, Fuel ROI.",
                         "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags.",
                         "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine.",
@@ -387,7 +398,7 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
-            // --- AI INTEGRATION SECTION (V5.2) ---
+            // --- AI INTEGRATION SECTION ---
             item {
                 Column(modifier = elasticMod(0)) {
                     Row(
@@ -995,7 +1006,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "5.2"
+                                            val currentVersion = "6.0"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1137,7 +1148,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v5.2",
+                        text = "v6.0", // V6.0 BUMP
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -43,7 +45,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -534,6 +536,11 @@ fun MealCard(
         else -> if (isSystemDark) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
     }
 
+    val macroRegex = Regex("""\s*\[(.*?)\]$""")
+    val match = macroRegex.find(entry.description)
+    val cleanDesc = if (match != null) entry.description.replace(match.value, "").trim() else entry.description
+    val macrosStr = match?.groups?.get(1)?.value
+
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = true,
@@ -629,12 +636,39 @@ fun MealCard(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = entry.description,
+                        text = cleanDesc,
                         style = MaterialTheme.typography.bodyLarge.copy(
                             lineHeight = 22.sp
                         ),
                         fontWeight = FontWeight.Medium
                     )
+                    if (macrosStr != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = macrosStr,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Text(
@@ -647,17 +681,16 @@ fun MealCard(
     }
 }
 
-// --- V5.2: GEMINI API HTTP CALL ---
-suspend fun fetchMacros(apiKey: String, description: String): String {
+suspend fun fetchMacros(context: Context, apiKey: String, description: String): String {
     return withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
+            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
 
-            val prompt = "Estimate the macros for this meal: '$description'. Return ONLY a JSON object in this exact format: {\"kcal\": 350, \"p\": 20, \"f\": 15, \"c\": 30}. Do not use markdown formatting like ```json."
+            val prompt = "Estimate the macros for this meal: '$description'. Return ONLY a JSON object in this exact format: {\"kcal\": 350, \"p\": 20, \"f\": 15, \"c\": 30}. Do not use markdown formatting."
             val payload = JSONObject().apply {
                 put("contents", JSONArray().apply {
                     put(JSONObject().apply {
@@ -685,7 +718,9 @@ suspend fun fetchMacros(apiKey: String, description: String): String {
                     .getJSONObject(0)
                     .getString("text")
 
-                val macroJson = JSONObject(textResult.trim())
+                val cleanJsonString = textResult.replace("```json", "").replace("```", "").trim()
+
+                val macroJson = JSONObject(cleanJsonString)
                 val kcal = macroJson.optInt("kcal", 0)
                 val p = macroJson.optInt("p", 0)
                 val f = macroJson.optInt("f", 0)
@@ -693,10 +728,82 @@ suspend fun fetchMacros(apiKey: String, description: String): String {
 
                 " [$kcal kcal | ${p}g P | ${f}g F | ${c}g C]"
             } else {
-                "" // Silent fail
+                val errorMsg = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown API Error"
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "API Error ${connection.responseCode}: Check Key", Toast.LENGTH_LONG).show()
+                }
+                ""
             }
         } catch (e: Exception) {
-            "" // Silent fail
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "JSON Parse/Network Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+            ""
+        }
+    }
+}
+
+// --- V6.0.1: CONTEXT-AWARE COURSE CORRECTION AI CALL ---
+suspend fun fetchSalvageIdea(context: Context, apiKey: String, targetDeficit: String, phase: String, recentMeals: List<MealEntity> = emptyList()): String {
+    return withContext(Dispatchers.IO) {
+        try {
+            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+
+            val mealContext = if (recentMeals.isNotEmpty()) {
+                "Base your suggestion heavily on my palate. I usually eat things like: " + recentMeals.joinToString(", ") { it.description.substringBefore("[").trim() }
+            } else {
+                ""
+            }
+
+            val prompt = if (phase == "cut") {
+                "I am cutting and struggling. My current deficit logged is $targetDeficit. $mealContext. Give me exactly ONE short, hyper-specific, extremely high-satiety, low-calorie rescue meal idea to stop me from bingeing further today. Max 2 sentences. No markdown. No intro/outro text."
+            } else {
+                "I am bulking and missing my target. My current surplus logged is $targetDeficit. $mealContext. Give me exactly ONE short, hyper-specific, highly calorie-dense, low-volume meal idea to easily hit my surplus today. Max 2 sentences. No markdown. No intro/outro text."
+            }
+
+            val payload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("text", prompt)
+                            })
+                        })
+                    })
+                })
+            }
+
+            connection.outputStream.use { os ->
+                val input = payload.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            if (connection.responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().readText()
+                val jsonResponse = JSONObject(response)
+                val textResult = jsonResponse.getJSONArray("candidates")
+                    .getJSONObject(0)
+                    .getJSONObject("content")
+                    .getJSONArray("parts")
+                    .getJSONObject(0)
+                    .getString("text")
+
+                textResult.replace("```", "").trim()
+            } else {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Salvage API Error ${connection.responseCode}", Toast.LENGTH_SHORT).show()
+                }
+                ""
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Network Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+            ""
         }
     }
 }
@@ -822,7 +929,7 @@ fun AddMealDialog(
             if (geminiApiStr.isNotBlank() && !mealText.contains("kcal |")) {
                 isCalculating = true
                 coroutineScope.launch {
-                    val macroAppend = fetchMacros(geminiApiStr, mealText)
+                    val macroAppend = fetchMacros(context, geminiApiStr, mealText)
                     isCalculating = false
                     onSave(mealTime, selectedMealType, (mealText + macroAppend).trim())
                 }
@@ -832,27 +939,28 @@ fun AddMealDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = {
-            if (!isCalculating) {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                keyboardController?.hide()
-                onDismiss()
-            }
-        },
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = !isCalculating,
-            dismissOnClickOutside = !isCalculating
-        )
+            .fillMaxSize()
+            .zIndex(100f)
+            .background(Color.Black.copy(alpha = 0.5f * (1f - backProgress)))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                if (!isCalculating) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    keyboardController?.hide()
+                    onDismiss()
+                }
+            },
+        contentAlignment = Alignment.Center
     ) {
         Surface(
             shape = RoundedCornerShape(32.dp),
             tonalElevation = 6.dp,
             modifier = Modifier
+                .padding(16.dp)
                 .widthIn(max = 400.dp)
                 .graphicsLayer {
                     val scale = 1f - (backProgress * 0.15f)
@@ -860,6 +968,10 @@ fun AddMealDialog(
                     scaleY = scale
                     alpha = 1f - (backProgress * 0.5f)
                 }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {}
         ) {
             Column(
                 modifier = Modifier.padding(24.dp)
@@ -1002,7 +1114,9 @@ fun AddMealDialog(
                 ) {
                     if (isCalculating) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp).padding(end = 16.dp),
+                            modifier = Modifier
+                                .padding(end = 16.dp)
+                                .size(20.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -1027,7 +1141,10 @@ fun AddMealDialog(
                         shape = RoundedCornerShape(12.dp),
                         enabled = !isCalculating
                     ) {
-                        Text(text = if (isCalculating) "Calculating AI Macros..." else "Save Entry")
+                        Text(
+                            text = if (isCalculating) "Calculating..." else "Save Entry",
+                            modifier = Modifier.defaultMinSize(minWidth = 140.dp)
+                        )
                     }
                 }
             }

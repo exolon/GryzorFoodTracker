@@ -13,10 +13,10 @@ android {
         minSdk = 26
         targetSdk = 36
 
-        // --- V5.0 DEPLOYMENT BUMP ---
-        versionCode = 36
-        versionName = "5.2"
-        // ----------------------------
+        // --- V6.0 DEPLOYMENT ---
+        versionCode = 37
+        versionName = "6.0"
+        // -----------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -75,4 +75,7 @@ dependencies {
 
     // Android Glance (Widgets)
     implementation("androidx.glance:glance-appwidget:1.1.0")
+
+    // WorkManager for Background Habit Tracking
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }
