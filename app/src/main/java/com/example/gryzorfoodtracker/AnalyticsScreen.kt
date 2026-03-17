@@ -88,7 +88,6 @@ fun AnalyticsScreen(
         .map { it[CUSTOM_TAGS_KEY] ?: DEFAULT_TAGS }
         .collectAsState(initial = DEFAULT_TAGS)
 
-    // --- V7.0: RESILIENCE ECONOMY STATE ---
     val currentStreak by context.dataStore.data.map { it[CURRENT_STREAK_KEY] ?: 0 }.collectAsState(0)
     val longestStreak by context.dataStore.data.map { it[LONGEST_STREAK_KEY] ?: 0 }.collectAsState(0)
     val shieldCount by context.dataStore.data.map { it[SHIELD_COUNT_KEY] ?: 0 }.collectAsState(0)
@@ -303,7 +302,6 @@ fun AnalyticsScreen(
                 .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
-            // --- V7.0: RESILIENCE ECONOMY DASHBOARD ---
             item {
                 Column(modifier = elasticMod(0).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -348,10 +346,12 @@ fun AnalyticsScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Card 1: Shield Economy
+                    Row(
+                        modifier = Modifier.height(IntrinsicSize.Max), // Force equal heights
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Surface(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             border = BorderStroke(
@@ -409,9 +409,8 @@ fun AnalyticsScreen(
                             }
                         }
 
-                        // Card 2: Streak Momentum
                         Surface(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             border = BorderStroke(
@@ -459,7 +458,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 1. TOP METRIC CARDS ---
             item {
                 Column(modifier = elasticMod(1).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -594,7 +592,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 2. CONSISTENCY HEATMAP ---
             item {
                 val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
 
@@ -710,7 +707,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 3. MACRO TREND GRAPH ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -1112,7 +1108,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 4. BODY COMP TREND GRAPH (SPLIT PANE) ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1400,7 +1395,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- 5. BEHAVIORAL COMPLIANCE MATRIX ---
             item {
                 var showTooltip by remember { mutableStateOf(false) }
 

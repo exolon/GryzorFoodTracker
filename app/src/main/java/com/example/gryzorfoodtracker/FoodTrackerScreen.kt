@@ -186,12 +186,10 @@ fun FoodTrackerScreen(
     val geminiApiStr by context.dataStore.data.map { it[GEMINI_API_KEY] ?: "" }.collectAsState("")
     val phasePreference by context.dataStore.data.map { it[PHASE_MODE_KEY] ?: "cut" }.collectAsState("cut")
 
-    // --- V7.0: RESILIENCE ENGINE STATE ---
     val currentStreak by context.dataStore.data.map { it[CURRENT_STREAK_KEY] ?: 0 }.collectAsState(0)
     val shieldCount by context.dataStore.data.map { it[SHIELD_COUNT_KEY] ?: 0 }.collectAsState(0)
     val lastEvaluatedDateStr by context.dataStore.data.map { it[LAST_EVALUATED_DATE_KEY] ?: "" }.collectAsState("")
 
-    // --- V7.0: THE ADJUDICATOR ---
     LaunchedEffect(lastEvaluatedDateStr, phasePreference) {
         withContext(Dispatchers.IO) {
             val today = LocalDate.now()
@@ -200,7 +198,16 @@ fun FoodTrackerScreen(
             val lastEval = if (lastEvaluatedDateStr.isNotBlank()) {
                 LocalDate.parse(lastEvaluatedDateStr)
             } else {
-                yesterday // Start fresh if never evaluated before
+                // V7.0 Dynamic Genesis Discovery:
+                // Find the absolute earliest date in the database
+                val allMetrics = dao.getAllMetrics().first()
+                val genesisDateStr = allMetrics.minByOrNull { it.date }?.date
+
+                if (genesisDateStr != null) {
+                    LocalDate.parse(genesisDateStr).minusDays(1)
+                } else {
+                    yesterday // Fallback if database is entirely empty
+                }
             }
 
             if (lastEval.isBefore(yesterday)) {
@@ -217,31 +224,30 @@ fun FoodTrackerScreen(
                     val defVal = metric?.deficit?.toFloatOrNull()
 
                     if (defVal != null) {
-                        val isSuccess = if (phasePreference == "cut") defVal < 0f else defVal > 0f
+                        val isSuccess = if (phasePreference == "cut") defVal > 0f else defVal < 0f
 
                         if (isSuccess) {
                             currStreak++
                             perfects++
-                            if (perfects >= 6) { // 6 days earns 1 Shield
-                                shields = minOf(3, shields + 1) // Hard cap of 3
+                            if (perfects >= 6) {
+                                shields = minOf(3, shields + 1)
                                 perfects = 0
                             }
                             if (currStreak > longest) longest = currStreak
                         } else {
                             if (shields > 0) {
                                 shields--
-                                currStreak++ // Streak protected!
+                                currStreak++
                                 if (currStreak > longest) longest = currStreak
                             } else {
-                                currStreak = 0 // Streak broken
+                                currStreak = 0
                                 perfects = 0
                             }
                         }
                     } else {
-                        // User forgot to log
                         if (shields > 0) {
                             shields--
-                            currStreak++ // Shield deployed for a missed day
+                            currStreak++
                             if (currStreak > longest) longest = currStreak
                         } else {
                             currStreak = 0
@@ -251,7 +257,6 @@ fun FoodTrackerScreen(
                     evalDate = evalDate.plusDays(1)
                 }
 
-                // Save the new economy back to DataStore
                 context.dataStore.edit { editPrefs ->
                     editPrefs[CURRENT_STREAK_KEY] = currStreak
                     editPrefs[SHIELD_COUNT_KEY] = shields
@@ -260,7 +265,6 @@ fun FoodTrackerScreen(
                     editPrefs[LAST_EVALUATED_DATE_KEY] = yesterday.toString()
                 }
             } else if (lastEvaluatedDateStr.isBlank()) {
-                // Initialize the ledger
                 context.dataStore.edit { editPrefs ->
                     editPrefs[LAST_EVALUATED_DATE_KEY] = yesterday.toString()
                 }
@@ -423,8 +427,8 @@ fun FoodTrackerScreen(
                             MacroWidget().updateAll(context)
                         }
                     },
-                    currentStreak = currentStreak, // V7.0
-                    shieldCount = shieldCount,     // V7.0
+                    currentStreak = currentStreak,
+                    shieldCount = shieldCount,
                     scrollBehavior = scrollBehavior,
                     onBehaviorClick = { navController.navigate("behavior") },
                     onAnalyticsClick = { navController.navigate("analytics") },
@@ -1189,22 +1193,85 @@ fun FoodTrackerScreen(
 
                                             Spacer(modifier = Modifier.height(12.dp))
 
-                                            OutlinedTextField(
-                                                value = insightText,
-                                                onValueChange = {
-                                                    insightText = it
-                                                    coroutineScope.launch(Dispatchers.IO) {
-                                                        dao.insertInsight(
-                                                            DailyInsightEntity(
-                                                                date = pageDate,
-                                                                insight = it
+                                            val aiPrefix = "🚨 AI Rescue Strategy:\n"
+                                            val manualNotes = if (insightText.contains(aiPrefix)) insightText.substringBefore(aiPrefix).trimEnd() else insightText
+
+                                            val aiStrategies = if (insightText.contains(aiPrefix)) {
+                                                insightText.substringAfter(aiPrefix).split("\n\n$aiPrefix").map { it.trim() }.filter { it.isNotBlank() }
+                                            } else {
+                                                emptyList()
+                                            }
+
+                                            aiStrategies.forEachIndexed { index, strategy ->
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(12.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.Top
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = "AI Rescue Strategy",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.error
                                                             )
-                                                        )
+                                                            Spacer(modifier = Modifier.height(4.dp))
+                                                            Text(
+                                                                text = strategy,
+                                                                style = MaterialTheme.typography.bodyMedium
+                                                            )
+                                                        }
+                                                        IconButton(
+                                                            onClick = {
+                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                val newList = aiStrategies.toMutableList()
+                                                                newList.removeAt(index)
+
+                                                                val parts = mutableListOf<String>()
+                                                                if (manualNotes.isNotBlank()) parts.add(manualNotes)
+                                                                newList.forEach { parts.add("$aiPrefix$it") }
+
+                                                                val newInsightStr = parts.joinToString("\n\n")
+                                                                insightText = newInsightStr
+
+                                                                coroutineScope.launch(Dispatchers.IO) {
+                                                                    dao.insertInsight(DailyInsightEntity(pageDate, newInsightStr))
+                                                                }
+                                                            },
+                                                            modifier = Modifier.size(24.dp).padding(start = 8.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.Close,
+                                                                contentDescription = "Clear",
+                                                                modifier = Modifier.size(16.dp),
+                                                                tint = MaterialTheme.colorScheme.error
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            OutlinedTextField(
+                                                value = manualNotes,
+                                                onValueChange = { newVal ->
+                                                    val parts = mutableListOf<String>()
+                                                    if (newVal.isNotEmpty()) parts.add(newVal)
+                                                    aiStrategies.forEach { parts.add("$aiPrefix$it") }
+
+                                                    val newInsightStr = parts.joinToString("\n\n")
+                                                    insightText = newInsightStr
+
+                                                    coroutineScope.launch(Dispatchers.IO) {
+                                                        dao.insertInsight(DailyInsightEntity(pageDate, newInsightStr))
                                                     }
                                                 },
                                                 placeholder = {
                                                     Text(
-                                                        text = "Paste AI conclusions here...",
+                                                        text = "Paste manual notes here...",
                                                         color = MaterialTheme.colorScheme.outline
                                                     )
                                                 },
