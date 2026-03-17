@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -65,6 +68,12 @@ data class TagStat(
     val totalDays: Int,
     val winRate: Int,
     val avgDeficit: Int
+)
+
+data class FactorStat(
+    val level: Int,
+    val totalDays: Int,
+    val winRate: Int
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -143,6 +152,45 @@ fun AnalyticsScreen(
 
     val diffKcal = curKcalAvg - prevKcalAvg
     val diffDef = curDefAvg - prevDefAvg
+
+    // --- V8.0 FACTOR STATS ENGINE ---
+    val frictionStats = remember(allTags, allMetrics, phasePreference) {
+        val stats = mutableListOf<FactorStat>()
+        for (level in 1..5) {
+            val daysWithLevel = allTags.filter { it.tags.contains("Friction: $level") }
+            val total = daysWithLevel.size
+            if (total > 0) {
+                val wins = daysWithLevel.count { tag ->
+                    val metric = allMetrics.find { it.date == tag.date }
+                    val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
+                    if (phasePreference == "bulk") def < 0 else def > 0
+                }
+                stats.add(FactorStat(level, total, (wins.toFloat() / total * 100).toInt()))
+            } else {
+                stats.add(FactorStat(level, 0, 0))
+            }
+        }
+        stats
+    }
+
+    val sleepStats = remember(allTags, allMetrics, phasePreference) {
+        val stats = mutableListOf<FactorStat>()
+        for (level in 1..5) {
+            val daysWithLevel = allTags.filter { it.tags.contains("Sleep: $level") }
+            val total = daysWithLevel.size
+            if (total > 0) {
+                val wins = daysWithLevel.count { tag ->
+                    val metric = allMetrics.find { it.date == tag.date }
+                    val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
+                    if (phasePreference == "bulk") def < 0 else def > 0
+                }
+                stats.add(FactorStat(level, total, (wins.toFloat() / total * 100).toInt()))
+            } else {
+                stats.add(FactorStat(level, 0, 0))
+            }
+        }
+        stats
+    }
 
     val tagStats = remember(allTags, allMetrics, phasePreference, customTags) {
         val metricsMap = allMetrics.associateBy { it.date }
@@ -244,6 +292,7 @@ fun AnalyticsScreen(
     var showHeatmapTooltip by remember { mutableStateOf(false) }
     var showMacroTooltip by remember { mutableStateOf(false) }
     var showCompTooltip by remember { mutableStateOf(false) }
+    var showFactorsTooltip by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -347,7 +396,7 @@ fun AnalyticsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
-                        modifier = Modifier.height(IntrinsicSize.Max), // Force equal heights
+                        modifier = Modifier.height(IntrinsicSize.Max),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Surface(
@@ -707,6 +756,167 @@ fun AnalyticsScreen(
                 }
             }
 
+            // --- V8.0 Biological & Cognitive Constraints Matrix ---
+            item {
+                Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Biological & Cognitive Matrix",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showFactorsTooltip = !showFactorsTooltip
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.QuestionMark,
+                                contentDescription = "Info",
+                                modifier = Modifier.padding(3.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showFactorsTooltip) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                        ) {
+                            Text(
+                                text = "Cross-references your daily Win Rate against your self-reported Friction (Cognitive Load) and Sleep Quality scores. Visualizes the exact point at which physical or mental fatigue breaks your habit compliance.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Friction Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Friction Impact", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (frictionStats.all { it.totalDays == 0 }) {
+                                    Text("Not enough data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outlineVariant)
+                                } else {
+                                    frictionStats.forEach { stat ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "L${stat.level}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.width(20.dp)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(8.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            ) {
+                                                val barColor = if (stat.winRate > 60) MaterialTheme.colorScheme.primary else if (stat.winRate > 30) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxHeight()
+                                                        .fillMaxWidth(if (stat.totalDays > 0) stat.winRate / 100f else 0f)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(barColor)
+                                                )
+                                            }
+                                            Text(
+                                                text = if (stat.totalDays > 0) "${stat.winRate}%" else "-",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.width(36.dp),
+                                                textAlign = TextAlign.End
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Sleep Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Bedtime, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Sleep Impact", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (sleepStats.all { it.totalDays == 0 }) {
+                                    Text("Not enough data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outlineVariant)
+                                } else {
+                                    sleepStats.forEach { stat ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "L${stat.level}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.width(20.dp)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(8.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            ) {
+                                                val barColor = if (stat.winRate > 60) MaterialTheme.colorScheme.primary else if (stat.winRate > 30) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxHeight()
+                                                        .fillMaxWidth(if (stat.totalDays > 0) stat.winRate / 100f else 0f)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(barColor)
+                                                )
+                                            }
+                                            Text(
+                                                text = if (stat.totalDays > 0) "${stat.winRate}%" else "-",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.width(36.dp),
+                                                textAlign = TextAlign.End
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val errorColor = MaterialTheme.colorScheme.error
@@ -735,7 +945,7 @@ fun AnalyticsScreen(
                 var showSignalOverlay by remember { mutableStateOf(false) }
                 var lastMacroHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1135,7 +1345,7 @@ fun AnalyticsScreen(
                 var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
                 var lastCompHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(5).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Body Composition Trend",
@@ -1399,7 +1609,7 @@ fun AnalyticsScreen(
                 var showTooltip by remember { mutableStateOf(false) }
 
                 if (tagStats.isNotEmpty()) {
-                    Column(modifier = elasticMod(5).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
+                    Column(modifier = elasticMod(6).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Behavioral Compliance Matrix",

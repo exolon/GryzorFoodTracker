@@ -198,15 +198,13 @@ fun FoodTrackerScreen(
             val lastEval = if (lastEvaluatedDateStr.isNotBlank()) {
                 LocalDate.parse(lastEvaluatedDateStr)
             } else {
-                // V7.0 Dynamic Genesis Discovery:
-                // Find the absolute earliest date in the database
                 val allMetrics = dao.getAllMetrics().first()
                 val genesisDateStr = allMetrics.minByOrNull { it.date }?.date
 
                 if (genesisDateStr != null) {
                     LocalDate.parse(genesisDateStr).minusDays(1)
                 } else {
-                    yesterday // Fallback if database is entirely empty
+                    yesterday
                 }
             }
 
@@ -224,7 +222,7 @@ fun FoodTrackerScreen(
                     val defVal = metric?.deficit?.toFloatOrNull()
 
                     if (defVal != null) {
-                        val isSuccess = if (phasePreference == "cut") defVal > 0f else defVal < 0f
+                        val isSuccess = if (phasePreference == "cut") defVal >= 0f else defVal <= 0f
 
                         if (isSuccess) {
                             currStreak++
@@ -804,6 +802,10 @@ fun FoodTrackerScreen(
                                     .alpha(0.15f)
                             )
 
+                            var insightText by remember(pageInsight?.insight) { mutableStateOf(pageInsight?.insight ?: "") }
+                            val isSunday = LocalDate.parse(pageDate).dayOfWeek == java.time.DayOfWeek.SUNDAY
+                            val hasBrief = insightText.contains("🧠 Weekly Executive Brief:")
+
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -814,6 +816,90 @@ fun FoodTrackerScreen(
                                     bottom = 140.dp
                                 )
                             ) {
+
+                                // --- V8.0: SUNDAY EXECUTIVE BRIEF TRIGGER ---
+                                if (isSunday && geminiApiStr.isNotBlank() && !hasBrief) {
+                                    item {
+                                        var isGeneratingBrief by remember { mutableStateOf(false) }
+
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .animateItem()
+                                                .clickable(enabled = !isGeneratingBrief) {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    isGeneratingBrief = true
+                                                    coroutineScope.launch {
+                                                        // Gather last 7 days of data
+                                                        val weekDates = (0..6).map { LocalDate.parse(pageDate).minusDays(it.toLong()).toString() }
+                                                        val weekDataBuilder = java.lang.StringBuilder()
+
+                                                        weekDates.forEach { d ->
+                                                            val metrics = dao.getMetricsForDate(d).first()
+                                                            val tags = dao.getTagsForDate(d).first()?.tags ?: "None"
+                                                            val kIn = metrics?.totalKcal ?: "0"
+                                                            val kDef = metrics?.deficit ?: "0"
+                                                            weekDataBuilder.append("Date: $d | Intake: $kIn | Deficit: $kDef | Tags: $tags\n")
+                                                        }
+
+                                                        val brief = fetchWeeklyBrief(context, geminiApiStr, phasePreference, weekDataBuilder.toString())
+                                                        isGeneratingBrief = false
+
+                                                        if (brief.isNotBlank()) {
+                                                            val prefix = "🧠 Weekly Executive Brief:\n"
+                                                            val newInsight = if (insightText.isBlank()) "$prefix$brief" else "$prefix$brief\n\n$insightText"
+                                                            insightText = newInsight
+
+                                                            withContext(Dispatchers.IO) {
+                                                                dao.insertInsight(DailyInsightEntity(pageDate, newInsight))
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Assessment,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = "Sunday Executive Brief",
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = if (isGeneratingBrief) "Analyzing your week..." else "Tap to generate your 7-day AI strategic review.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                                        modifier = Modifier.padding(top = 4.dp)
+                                                    )
+                                                }
+                                                if (isGeneratingBrief) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(24.dp),
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        strokeWidth = 2.dp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 itemsIndexed(
                                     items = pageEntries,
                                     key = { _, item -> item.id }
@@ -866,7 +952,6 @@ fun FoodTrackerScreen(
                                 }
 
                                 item {
-                                    var insightText by remember(pageInsight?.insight) { mutableStateOf(pageInsight?.insight ?: "") }
                                     var totalKcal by remember(pageMetrics?.totalKcal) { mutableStateOf(pageMetrics?.totalKcal ?: "") }
                                     var deficit by remember(pageMetrics?.deficit) { mutableStateOf(pageMetrics?.deficit ?: "") }
                                     var inputWeight by remember(pageMeasurement?.weight) { mutableStateOf(pageMeasurement?.weight ?: "") }
@@ -982,7 +1067,7 @@ fun FoodTrackerScreen(
                                             }
 
                                             val defVal = deficit.toFloatOrNull() ?: 0f
-                                            val isStruggling = if (phasePreference == "cut") defVal < 0f else defVal > 0f
+                                            val isStruggling = if (phasePreference == "cut") defVal <= 0f else defVal >= 0f
 
                                             if (geminiApiStr.isNotBlank() && deficit.isNotBlank() && isStruggling) {
                                                 var isSalvaging by remember { mutableStateOf(false) }
@@ -1193,18 +1278,39 @@ fun FoodTrackerScreen(
 
                                             Spacer(modifier = Modifier.height(12.dp))
 
-                                            val aiPrefix = "🚨 AI Rescue Strategy:\n"
-                                            val manualNotes = if (insightText.contains(aiPrefix)) insightText.substringBefore(aiPrefix).trimEnd() else insightText
+                                            // --- V8.0: MULTI-AI BLOCK PARSER ---
+                                            val rescuePrefix = "🚨 AI Rescue Strategy:\n"
+                                            val briefPrefix = "🧠 Weekly Executive Brief:\n"
 
-                                            val aiStrategies = if (insightText.contains(aiPrefix)) {
-                                                insightText.substringAfter(aiPrefix).split("\n\n$aiPrefix").map { it.trim() }.filter { it.isNotBlank() }
-                                            } else {
-                                                emptyList()
+                                            var cleanNotes = insightText
+                                            val aiBlocks = mutableListOf<Pair<String, String>>() // Pair(Prefix, Content)
+
+                                            if (cleanNotes.contains(rescuePrefix)) {
+                                                val split = cleanNotes.split(rescuePrefix)
+                                                cleanNotes = split[0].trimEnd()
+                                                split.drop(1).forEach {
+                                                    val content = if (it.contains(briefPrefix)) it.substringBefore(briefPrefix) else it
+                                                    aiBlocks.add(Pair(rescuePrefix, content.trim()))
+                                                }
                                             }
 
-                                            aiStrategies.forEachIndexed { index, strategy ->
+                                            if (insightText.contains(briefPrefix)) {
+                                                val split = insightText.split(briefPrefix)
+                                                if (cleanNotes == insightText) cleanNotes = split[0].trimEnd()
+                                                split.drop(1).forEach {
+                                                    val content = if (it.contains(rescuePrefix)) it.substringBefore(rescuePrefix) else it
+                                                    aiBlocks.add(Pair(briefPrefix, content.trim()))
+                                                }
+                                            }
+
+                                            aiBlocks.forEachIndexed { index, block ->
+                                                val isBrief = block.first == briefPrefix
+                                                val cardColor = if (isBrief) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                                                val iconColor = if (isBrief) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                                val titleText = if (isBrief) "Weekly Executive Brief" else "AI Rescue Strategy"
+
                                                 Surface(
-                                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                                                    color = cardColor.copy(alpha = 0.3f),
                                                     shape = RoundedCornerShape(12.dp),
                                                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                                                 ) {
@@ -1215,25 +1321,25 @@ fun FoodTrackerScreen(
                                                     ) {
                                                         Column(modifier = Modifier.weight(1f)) {
                                                             Text(
-                                                                text = "AI Rescue Strategy",
+                                                                text = titleText,
                                                                 style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.error
+                                                                color = iconColor
                                                             )
                                                             Spacer(modifier = Modifier.height(4.dp))
                                                             Text(
-                                                                text = strategy,
+                                                                text = block.second,
                                                                 style = MaterialTheme.typography.bodyMedium
                                                             )
                                                         }
                                                         IconButton(
                                                             onClick = {
                                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                val newList = aiStrategies.toMutableList()
+                                                                val newList = aiBlocks.toMutableList()
                                                                 newList.removeAt(index)
 
                                                                 val parts = mutableListOf<String>()
-                                                                if (manualNotes.isNotBlank()) parts.add(manualNotes)
-                                                                newList.forEach { parts.add("$aiPrefix$it") }
+                                                                if (cleanNotes.isNotBlank()) parts.add(cleanNotes)
+                                                                newList.forEach { parts.add("${it.first}${it.second}") }
 
                                                                 val newInsightStr = parts.joinToString("\n\n")
                                                                 insightText = newInsightStr
@@ -1248,7 +1354,7 @@ fun FoodTrackerScreen(
                                                                 imageVector = Icons.Filled.Close,
                                                                 contentDescription = "Clear",
                                                                 modifier = Modifier.size(16.dp),
-                                                                tint = MaterialTheme.colorScheme.error
+                                                                tint = iconColor
                                                             )
                                                         }
                                                     }
@@ -1256,11 +1362,11 @@ fun FoodTrackerScreen(
                                             }
 
                                             OutlinedTextField(
-                                                value = manualNotes,
+                                                value = cleanNotes,
                                                 onValueChange = { newVal ->
                                                     val parts = mutableListOf<String>()
                                                     if (newVal.isNotEmpty()) parts.add(newVal)
-                                                    aiStrategies.forEach { parts.add("$aiPrefix$it") }
+                                                    aiBlocks.forEach { parts.add("${it.first}${it.second}") }
 
                                                     val newInsightStr = parts.joinToString("\n\n")
                                                     insightText = newInsightStr
@@ -1283,10 +1389,7 @@ fun FoodTrackerScreen(
                                                     },
                                                 textStyle = MaterialTheme.typography.bodyLarge,
                                                 keyboardOptions = KeyboardOptions(
-                                                    imeAction = ImeAction.Done
-                                                ),
-                                                keyboardActions = KeyboardActions(
-                                                    onDone = { focusManager.clearFocus() }
+                                                    imeAction = ImeAction.Default
                                                 ),
                                                 colors = OutlinedTextFieldDefaults.colors(
                                                     unfocusedBorderColor = Color.Transparent,

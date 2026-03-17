@@ -191,8 +191,8 @@ fun LargeDayHeader(
     onFrictionChange: (Int) -> Unit,
     sleepScore: Int,
     onSleepChange: (Int) -> Unit,
-    currentStreak: Int = 0, // V7.0: Default to 0 for safe compilation
-    shieldCount: Int = 0,   // V7.0: Default to 0 for safe compilation
+    currentStreak: Int = 0,
+    shieldCount: Int = 0,
     scrollBehavior: TopAppBarScrollBehavior,
     onBehaviorClick: () -> Unit,
     onAnalyticsClick: () -> Unit,
@@ -376,7 +376,6 @@ fun LargeDayHeader(
                         color = MaterialTheme.colorScheme.secondary
                     )
 
-                    // --- V7.0: STREAK & SHIELDS UI ---
                     if (currentStreak > 0 || shieldCount > 0) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -412,7 +411,6 @@ fun LargeDayHeader(
                             }
                         }
                     }
-                    // ---------------------------------
 
                     if (!dailyKcal.isNullOrBlank() || !dailyDeficit.isNullOrBlank() || !dailyWeight.isNullOrBlank() || !dailyFat.isNullOrBlank()) {
                         Spacer(
@@ -847,6 +845,71 @@ suspend fun fetchSalvageIdea(context: Context, apiKey: String, targetDeficit: St
     }
 }
 
+// --- V8.0 WEEKLY EXECUTIVE BRIEF ENGINE ---
+suspend fun fetchWeeklyBrief(context: Context, apiKey: String, phase: String, weeklyDataStr: String): String {
+    return withContext(Dispatchers.IO) {
+        try {
+            val url = URL("[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$){apiKey.trim()}")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+
+            val prompt = """
+                You are a behavioral scientist and high-performance coach. 
+                Analyze the following 7 days of user data. The user is currently in a "$phase" phase.
+                Data format: Date | Intake | Deficit | Context Tags (includes Friction 1-5 and Sleep 1-5).
+                
+                $weeklyDataStr
+                
+                Identify blind spots and correlations (e.g., "Your compliance drops significantly when Sleep is Level 2").
+                Provide EXACTLY 3 short, punchy, actionable bullet points. 
+                Do not use corporate jargon. Use plain English. No introductory text, no fluff.
+            """.trimIndent()
+
+            val payload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("text", prompt)
+                            })
+                        })
+                    })
+                })
+            }
+
+            connection.outputStream.use { os ->
+                val input = payload.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            if (connection.responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().readText()
+                val jsonResponse = JSONObject(response)
+                val textResult = jsonResponse.getJSONArray("candidates")
+                    .getJSONObject(0)
+                    .getJSONObject("content")
+                    .getJSONArray("parts")
+                    .getJSONObject(0)
+                    .getString("text")
+
+                textResult.replace("```", "").trim()
+            } else {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Briefing API Error ${connection.responseCode}", Toast.LENGTH_SHORT).show()
+                }
+                ""
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Network Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+            ""
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddMealDialog(
@@ -1099,10 +1162,7 @@ fun AddMealDialog(
                     enabled = !isCalculating,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Sentences,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = { executeSave() }
+                        imeAction = ImeAction.Default
                     )
                 )
 

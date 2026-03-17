@@ -258,7 +258,7 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = { Text(text = "App Manual (v6)") },
+            title = { Text(text = "App Manual (v7.5)") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     item {
@@ -278,7 +278,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Course Correction: If you exceed your target, tap the AI wand to generate a 'Salvage My Day' optimized meal suggestion based on your recent palate to pull your trajectory back into the green.\n• The Habit Loop: The app learns your meal timings and fires interactive notifications. Tap 'Log' to instantly record it, or 'Edit' to tweak the macros.",
+                            text = "• Course Correction: If you exceed your target, tap the AI wand to generate a 'Salvage My Day' optimized meal suggestion based on your recent palate to pull your trajectory back into the green.\n• Executive Brief: Tap the glowing AI card on Sundays to generate a 7-day strategic review of your habits and blind spots.\n• The Habit Loop: The app learns your meal timings and fires interactive notifications. Tap 'Log' to instantly record it, or 'Edit' to tweak the macros.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -288,7 +288,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Tags: Tap the context chips to flag conditions (e.g. 'Grind', 'Recovery').\n• Morning Intent: Empty days feature a dashboard to log your Cognitive Load and Sleep Quality to establish a daily baseline.\n• Ambient Auras: The background physically 'breathes' based on your systemic stress.",
+                            text = "• Tags: Tap the context chips to flag conditions (e.g. 'Grind', 'Recovery').\n• Morning Intent: Empty days feature a dashboard to log your Cognitive Load and Sleep Quality to establish a daily baseline.\n• Shield Economy: Earn armor for hitting your streak. Missing a day consumes a shield instead of destroying your momentum.\n• Ambient Auras: The background physically 'breathes' based on your systemic stress.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -298,7 +298,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "• Executive Report: Tap the Print icon in Analytics to generate a high-fidelity PDF Tear-Sheet featuring pure vector charting of your 30-day trajectory.\n• Trailing Signal Overlay: Drag your finger across graphs to scrub data, and toggle the 'Signal' switch to reveal the underlying 7-day weighted moving average.\n• Behavioral Matrix: Calculates your caloric success rate strictly against the context tags you apply.",
+                            text = "• Executive Report: Tap the Print icon in Analytics to generate a high-fidelity PDF Tear-Sheet featuring pure vector charting of your 30-day trajectory.\n• Trailing Signal Overlay: Drag your finger across graphs to scrub data, and toggle the 'Signal' switch to reveal the underlying 7-day weighted moving average.\n• Behavioral Matrices: Track your caloric success rate strictly against the context tags you apply, and visualize how your Sleep and Friction scores directly impact your Win Rate.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -325,6 +325,8 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v7.5" to "The Intelligence Update: Shifted focus from tactical tracking to macro-intelligence. Built the 'Sunday Executive Brief' Macro-AI for automated weekly strategic reviews. Injected the 'Biological & Cognitive Constraints Matrix' to visualize the direct correlation between physical/mental fatigue and dietary compliance.",
+                        "v7.0" to "The Resilience Engine: Built an active gamified micro-economy to prevent the 'Abstinence Violation Effect'. Every 6 perfect days earns a Shield (max 3) which automatically protects your momentum if you miss a target. Added dismissible UI cards for AI Rescue Strategies.",
                         "v6.0" to "The Active Compass Pass: Transformed Gryzor into a proactive behavioral copilot. Added a 'Salvage My Day' AI magic wand to generate hyper-specific, context-aware rescue meals when deficits slip. Introduced a Predictive Habit Engine (WorkManager) that analyzes your 7-day logging patterns and sends actionable Android notifications to 1-tap log or edit your most frequent meals.",
                         "v5.3" to "The UI Polish Pass: Converted macro strings into visual UI pills. Rebuilt AddMealDialog into a pure full-screen Compose Box to perfectly support predictive back-scaling.",
                         "v5.2" to "The Automation Pass: Integrated Gemini AI to automatically calculate Macros directly into the Meal text string. Added a Regex parser to dynamically sum Daily AI Totals.",
@@ -1006,7 +1008,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "6.0"
+                                            val currentVersion = "7.5"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1148,7 +1150,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v6.0", // V6.0 BUMP
+                        text = "v7.5",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )
