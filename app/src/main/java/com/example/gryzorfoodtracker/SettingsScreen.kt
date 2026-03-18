@@ -13,6 +13,7 @@ import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -65,7 +66,13 @@ import kotlin.random.Random
 val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
 val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target")
 val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
-val TARGET_FAT_KEY = stringPreferencesKey("target_fat") // Added Target Fat Key
+val TARGET_FAT_KEY = stringPreferencesKey("target_fat")
+
+data class ManualSection(
+    val title: String,
+    val content: String,
+    val academicInsight: String? = null
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,7 +129,6 @@ fun SettingsScreen(
     var localFastState by remember { mutableStateOf(TextFieldValue(fastingTargetStr)) }
     var localApiState by remember { mutableStateOf(TextFieldValue(geminiApiStr)) }
 
-    // State to track if the API key should be hidden
     var isApiKeyHidden by remember(geminiApiStr) { mutableStateOf(geminiApiStr.isNotBlank()) }
 
     LaunchedEffect(targetWeightStr) {
@@ -272,54 +278,92 @@ fun SettingsScreen(
     }
 
     if (showManual) {
+        val manualSections = listOf(
+            ManualSection(
+                title = "The Capture Engine",
+                content = "• AI Auto-Macros: Type your meal in plain English. The AI calculates macros and attaches them instantly.\n• Voice Input: Hold the Mic button and speak naturally.\n• Gestures: Swipe left to delete, right to duplicate. The 'Predictive Back' gesture physically scales dialogs as you swipe.\n\nTakeaway:\n• By removing data-entry friction, you preserve cognitive bandwidth for actual decision making.",
+                academicInsight = "Reduces System 2 cognitive load (Kahneman, 2011)."
+            ),
+            ManualSection(
+                title = "The Active Compass",
+                content = "• Salvage My Day: If you exceed your target, tap the AI wand to generate a high-satiety rescue meal to pull your trajectory back into the green.\n• Executive Brief: Tap the glowing AI card on Sundays. The system reads your 7-day data and outputs a strategic review.\n• Adaptive Targets: High friction or poor sleep triggers a 'Tactical Maintenance' authorization. Accept it to set your target to 0, protecting your streak.\n\nTakeaway:\n• Rigid systems break. Adaptive flexibility prevents the 'what-the-hell' binge effect.",
+                academicInsight = "Mitigates the Abstinence Violation Effect (Marlatt & Gordon, 1985)."
+            ),
+            ManualSection(
+                title = "The Context Layer",
+                content = "• Morning Intent: Log your Cognitive Load and Sleep Quality to establish a daily baseline.\n• Shield Economy: Every 6 perfect days earns a Shield (max 3). Missing a target consumes a Shield instead of breaking your momentum.\n• Ambient Auras: The UI physically 'breathes' based on your systemic stress levels.\n\nTakeaway:\n• Gamified slack prevents habit abandonment when life gets chaotic."
+            ),
+            ManualSection(
+                title = "Analytics & Export",
+                content = "• Trailing Signals: Toggle 'Signal' on graphs to view your 7-day moving average, filtering out daily scale noise.\n• Behavioral Matrices: Track your caloric success rate strictly against the context tags you apply.\n• Macro-Satiety Matrix: The AI parses your historical meals to prove how High vs Low Protein days affect your caloric compliance.\n• Executive Report: Export a high-fidelity PDF Tear-Sheet.\n\nTakeaway:\n• Move from guessing why you failed, to mathematically proving how you succeed.",
+                academicInsight = "Visualizes the Satiety Index in real-time (Holt et al., 1995)."
+            )
+        )
+
         AlertDialog(
             onDismissRequest = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = { Text(text = "App Manual (v7.51)") },
+            title = { Text(text = "App Manual (v8.0)") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    item {
-                        Text(
-                            text = "The Capture Engine",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "• AI Auto-Macros: Log a meal in plain text. Gemini AI will instantly calculate the macros and append them as a pill.\n• Voice Input: Hold the Mic button and speak naturally.\n• Gestures: Swipe left to delete, swipe right to duplicate. The 'Predictive Back' gesture physically scales dialogs as you swipe.\n• Typo Banishment: Long-press any suggested meal to permanently hide it.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "The Active Compass",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "• Course Correction: If you exceed your target, tap the AI wand to generate a 'Salvage My Day' optimized meal suggestion based on your recent palate to pull your trajectory back into the green.\n• Executive Brief: Tap the glowing AI card on Sundays to generate a 7-day strategic review of your habits and blind spots.\n• The Habit Loop: The app learns your meal timings and fires interactive notifications. Tap 'Log' to instantly record it, or 'Edit' to tweak the macros.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "The Context Layer",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "• Tags: Tap the context chips to flag conditions (e.g. 'Grind', 'Recovery').\n• Morning Intent: Empty days feature a dashboard to log your Cognitive Load and Sleep Quality to establish a daily baseline.\n• Shield Economy: Earn armor for hitting your streak. Missing a day consumes a shield instead of destroying your momentum.\n• Ambient Auras: The background physically 'breathes' based on your systemic stress.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Analytics & Export",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "• Executive Report: Tap the Print icon in Analytics to generate a high-fidelity PDF Tear-Sheet featuring pure vector charting of your 30-day trajectory.\n• Trailing Signal Overlay: Drag your finger across graphs to scrub data, and toggle the 'Signal' switch to reveal the underlying 7-day weighted moving average.\n• Behavioral Matrices: Track your caloric success rate strictly against the context tags you apply, and visualize how your Sleep and Friction scores directly impact your Win Rate.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                    items(manualSections) { section ->
+                        var isExpanded by remember { mutableStateOf(false) }
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    isExpanded = !isExpanded
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = section.title,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                        contentDescription = "Toggle",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                AnimatedVisibility(visible = isExpanded) {
+                                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                                        Text(
+                                            text = section.content,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        if (section.academicInsight != null) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Insight: ${section.academicInsight}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.secondary,
+                                                    modifier = Modifier.padding(8.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -344,7 +388,8 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v7.51" to "The Clarity Pass: Added Target Fat % field. Upgraded the Body Composition graph with a 7-day trailing signal overlay and a crisp UI separator. Refined card animation physics to reduce visual noise. Updated API key visual security flow.",
+                        "v8.0" to "The Adaptive Intelligence Update: Introduced the Adaptive Target Protocol (Tactical Maintenance authorizations on high friction days with a 250kcal grace buffer) and the Macro-Satiety Matrix (parsing historical AI meal tags to correlate Protein volume against Win Rates).",
+                        "v7.51" to "The Clarity Pass: Added Target Fat %. Upgraded Body Composition graph with a 7-day trailing signal overlay and a crisp UI separator. Refined card animation physics to reduce visual noise. Updated API key visual security flow.",
                         "v7.5" to "The Intelligence Update: Shifted focus from tactical tracking to macro-intelligence. Built the 'Sunday Executive Brief' Macro-AI for automated weekly strategic reviews. Injected the 'Biological & Cognitive Constraints Matrix' to visualize the direct correlation between physical/mental fatigue and dietary compliance.",
                         "v7.0" to "The Resilience Engine: Built an active gamified micro-economy to prevent the 'Abstinence Violation Effect'. Every 6 perfect days earns a Shield (max 3) which automatically protects your momentum if you miss a target. Added dismissible UI cards for AI Rescue Strategies.",
                         "v6.0" to "The Active Compass Pass: Transformed Gryzor into a proactive behavioral copilot. Added a 'Salvage My Day' AI magic wand to generate hyper-specific, context-aware rescue meals when deficits slip. Introduced a Predictive Habit Engine (WorkManager) that analyzes your 7-day logging patterns and sends actionable Android notifications to 1-tap log or edit your most frequent meals.",
@@ -1079,7 +1124,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "7.51"
+                                            val currentVersion = "8.0"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1221,7 +1266,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v7.51",
+                        text = "v8.0",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

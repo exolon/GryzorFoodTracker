@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.SetMeal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -108,6 +109,9 @@ fun AnalyticsScreen(
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
     val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
 
+    // V8.0 Requirement: Load all meals to parse P/F/C pills
+    val allMeals by dao.getAllMeals().collectAsState(initial = emptyList())
+
     val currentWeekDates = remember(today) {
         (0..6).map { today.minusDays(it.toLong()).toString() }
     }
@@ -162,7 +166,7 @@ fun AnalyticsScreen(
                 val wins = daysWithLevel.count { tag ->
                     val metric = allMetrics.find { it.date == tag.date }
                     val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
-                    if (phasePreference == "bulk") def < 0 else def > 0
+                    if (phasePreference == "bulk") def < 0 else def >= 0
                 }
                 stats.add(FactorStat(level, total, (wins.toFloat() / total * 100).toInt()))
             } else {
@@ -181,7 +185,7 @@ fun AnalyticsScreen(
                 val wins = daysWithLevel.count { tag ->
                     val metric = allMetrics.find { it.date == tag.date }
                     val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
-                    if (phasePreference == "bulk") def < 0 else def > 0
+                    if (phasePreference == "bulk") def < 0 else def >= 0
                 }
                 stats.add(FactorStat(level, total, (wins.toFloat() / total * 100).toInt()))
             } else {
@@ -189,6 +193,48 @@ fun AnalyticsScreen(
             }
         }
         stats
+    }
+
+    // --- V8.0 MACRO-SATIETY PARSER ---
+    val macroSatietyStats = remember(allMeals, allMetrics, phasePreference) {
+        val dailyP = mutableMapOf<String, Int>()
+
+        // Target: [xxx kcal | xxg P | xxg F | xxg C]
+        val macroRegex = Regex("""\[(\d+)\s*kcal\s*\|\s*(\d+)g\s*P\s*\|\s*(\d+)g\s*F\s*\|\s*(\d+)g\s*C\]""")
+
+        allMeals.forEach { meal ->
+            val match = macroRegex.find(meal.description)
+            if (match != null) {
+                val p = match.groupValues[2].toIntOrNull() ?: 0
+                dailyP[meal.date] = (dailyP[meal.date] ?: 0) + p
+            }
+        }
+
+        val pValues = dailyP.values.filter { it > 0 }.sorted()
+        // Determine median daily protein to dynamically define "High" vs "Low"
+        val medianP = if (pValues.isNotEmpty()) pValues[pValues.size / 2] else 140
+
+        var highPDays = 0; var highPWins = 0
+        var lowPDays = 0; var lowPWins = 0
+
+        dailyP.forEach { (date, p) ->
+            val metric = allMetrics.find { it.date == date }
+            val def = metric?.deficit?.toDoubleOrNull() ?: 0.0
+            val isWin = if (phasePreference == "bulk") def <= 0.0 else def >= 0.0
+
+            if (p >= medianP) {
+                highPDays++
+                if (isWin) highPWins++
+            } else {
+                lowPDays++
+                if (isWin) lowPWins++
+            }
+        }
+
+        val highPRate = if (highPDays > 0) (highPWins.toFloat() / highPDays * 100).toInt() else 0
+        val lowPRate = if (lowPDays > 0) (lowPWins.toFloat() / lowPDays * 100).toInt() else 0
+
+        Triple(medianP, highPRate, lowPRate)
     }
 
     val tagStats = remember(allTags, allMetrics, phasePreference, customTags) {
@@ -292,6 +338,7 @@ fun AnalyticsScreen(
     var showMacroTooltip by remember { mutableStateOf(false) }
     var showCompTooltip by remember { mutableStateOf(false) }
     var showFactorsTooltip by remember { mutableStateOf(false) }
+    var showSatietyTooltip by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -346,7 +393,6 @@ fun AnalyticsScreen(
                 ),
             contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp)
         ) {
-            // REDUCED MOTION: Decreased base multiplier from 40.dp to 20.dp
             fun elasticMod(index: Int) = Modifier
                 .offset(y = (20.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
@@ -552,7 +598,6 @@ fun AnalyticsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // REDUCED MOTION: Reduced gyro pitch multiplier
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
@@ -713,7 +758,7 @@ fun AnalyticsScreen(
                                 val metric = allMetrics.find { it.date == date }
                                 val defValue = metric?.deficit?.toDoubleOrNull()
                                 val isNoData = defValue == null || defValue == 0.0
-                                val isDaySuccess = if (phasePreference == "bulk") (defValue ?: 0.0) < 0 else (defValue ?: 0.0) > 0
+                                val isDaySuccess = if (phasePreference == "bulk") (defValue ?: 0.0) < 0 else (defValue ?: 0.0) >= 0
 
                                 val boxColor = if (isNoData) {
                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
@@ -757,8 +802,121 @@ fun AnalyticsScreen(
                 }
             }
 
+            // --- V8.0 Macro-Satiety Matrix ---
             item {
                 Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Macro-Satiety Matrix",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showSatietyTooltip = !showSatietyTooltip
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.QuestionMark,
+                                contentDescription = "Info",
+                                modifier = Modifier.padding(3.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showSatietyTooltip) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
+                        ) {
+                            Text(
+                                text = "Cross-references your caloric Win Rate against your actual macronutrient composition by actively parsing your AI-generated meal tags. Visually proves the physiological reality of the Satiety Index.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // High Protein Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.SetMeal, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("High Protein", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                val rateColor = if (macroSatietyStats.second > 60) MaterialTheme.colorScheme.primary else if (macroSatietyStats.second > 30) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+
+                                Text(
+                                    text = "${macroSatietyStats.second}%",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = rateColor
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Win Rate (≥${macroSatietyStats.first}g P)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        // Low Protein Card
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Low Protein", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                val rateColor = if (macroSatietyStats.third > 60) MaterialTheme.colorScheme.primary else if (macroSatietyStats.third > 30) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+
+                                Text(
+                                    text = "${macroSatietyStats.third}%",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = rateColor
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Win Rate (<${macroSatietyStats.first}g P)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Biological & Cognitive Matrix",
@@ -945,7 +1103,7 @@ fun AnalyticsScreen(
                 var showSignalOverlay by remember { mutableStateOf(false) }
                 var lastMacroHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(modifier = elasticMod(4).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(5).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1318,7 +1476,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- V8.0/V7.51 Upgraded Body Composition Graph ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1343,10 +1500,10 @@ fun AnalyticsScreen(
                 )
 
                 var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
-                var showCompSignalOverlay by remember { mutableStateOf(false) } // Added signal state
+                var showCompSignalOverlay by remember { mutableStateOf(false) }
                 var lastCompHapticIndex by remember { mutableIntStateOf(-1) }
 
-                Column(modifier = elasticMod(5).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
+                Column(modifier = elasticMod(6).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1377,7 +1534,6 @@ fun AnalyticsScreen(
                             }
                         }
 
-                        // Added Raw/Signal Toggle for Comp
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
@@ -1433,7 +1589,6 @@ fun AnalyticsScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Added 7-day rolling average nodes for Weight and Fat
                     data class CompNode(
                         val date: String,
                         val rawW: Float?,
@@ -1580,7 +1735,6 @@ fun AnalyticsScreen(
                                 val rangeW = maxWeight - minWeight
                                 val rangeF = maxFat - minFat
 
-                                // Sleek middle divider line
                                 drawLine(
                                     color = Color.Gray.copy(alpha = 0.3f),
                                     start = Offset(0f, graphHeight * 0.5f),
@@ -1709,7 +1863,7 @@ fun AnalyticsScreen(
                 var showTooltip by remember { mutableStateOf(false) }
 
                 if (tagStats.isNotEmpty()) {
-                    Column(modifier = elasticMod(6).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
+                    Column(modifier = elasticMod(7).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 0.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Behavioral Compliance Matrix",
@@ -1741,7 +1895,7 @@ fun AnalyticsScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                             ) {
-                                val successText = if (phasePreference == "bulk") "Surplus (< 0)" else "Deficit (> 0)"
+                                val successText = if (phasePreference == "bulk") "Surplus (≤ 0)" else "Deficit (≥ 0)"
                                 Text(
                                     text = "Success Rate = The percentage of days with this tag where you successfully logged a Caloric $successText.",
                                     style = MaterialTheme.typography.bodySmall,

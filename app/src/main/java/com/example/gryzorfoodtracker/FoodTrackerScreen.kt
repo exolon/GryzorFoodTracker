@@ -190,6 +190,7 @@ fun FoodTrackerScreen(
     val shieldCount by context.dataStore.data.map { it[SHIELD_COUNT_KEY] ?: 0 }.collectAsState(0)
     val lastEvaluatedDateStr by context.dataStore.data.map { it[LAST_EVALUATED_DATE_KEY] ?: "" }.collectAsState("")
 
+    // --- V8.0: ADAPTIVE ADJUDICATOR ---
     LaunchedEffect(lastEvaluatedDateStr, phasePreference) {
         withContext(Dispatchers.IO) {
             val today = LocalDate.now()
@@ -221,8 +222,15 @@ fun FoodTrackerScreen(
                     val metric = dao.getMetricsForDate(evalDate.toString()).first()
                     val defVal = metric?.deficit?.toFloatOrNull()
 
+                    // Pull historical tags to check for Adaptive Target intervention
+                    val tagsEntity = dao.getTagsForDate(evalDate.toString()).first()
+                    val isTactical = tagsEntity?.tags?.contains("Tactical Maintenance") == true
+
                     if (defVal != null) {
-                        val isSuccess = if (phasePreference == "cut") defVal >= 0f else defVal <= 0f
+                        // Apply a 250 kcal grace buffer if it's a declared Tactical Maintenance day
+                        val cutSuccess = if (isTactical) defVal >= -250f else defVal >= 0f
+                        val bulkSuccess = if (isTactical) defVal <= 250f else defVal <= 0f
+                        val isSuccess = if (phasePreference == "cut") cutSuccess else bulkSuccess
 
                         if (isSuccess) {
                             currStreak++
@@ -791,6 +799,53 @@ fun FoodTrackerScreen(
                                             )
                                         }
                                     }
+
+                                    // --- V8.0: ADAPTIVE TARGET INTERVENTION ---
+                                    val pageFrictionLevel = activeTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                                    val pageSleepLevel = activeTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                                    val isPageHighlyStressed = pageFrictionLevel >= 4 || (pageSleepLevel in 1..2)
+                                    val hasTacticalTag = activeTagsList.contains("Tactical Maintenance")
+
+                                    AnimatedVisibility(visible = isPageHighlyStressed && !hasTacticalTag) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp).clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                coroutineScope.launch(Dispatchers.IO) {
+                                                    val newTags = activeTagsList + "Tactical Maintenance"
+                                                    dao.insertTags(DailyTagEntity(date = pageDate, tags = newTags.joinToString(",")))
+                                                    MacroWidget().updateAll(context)
+                                                }
+                                            }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.HealthAndSafety,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(28.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Column {
+                                                    Text(
+                                                        text = "Cognitive Load Critical",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        text = "Tap to authorize a Tactical Maintenance day. The Adjudicator will suspend your deficit target to protect your streak.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } else {
@@ -817,7 +872,57 @@ fun FoodTrackerScreen(
                                 )
                             ) {
 
-                                // --- V8.0: SUNDAY EXECUTIVE BRIEF TRIGGER ---
+                                // --- V8.0: ADAPTIVE TARGET PERSISTENT CARD ---
+                                val pageFrictionLevel = activeTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                                val pageSleepLevel = activeTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
+                                val isPageHighlyStressed = pageFrictionLevel >= 4 || (pageSleepLevel in 1..2)
+                                val hasTacticalTag = activeTagsList.contains("Tactical Maintenance")
+
+                                if (isPageHighlyStressed && !hasTacticalTag) {
+                                    item {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                                            shape = RoundedCornerShape(16.dp),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                            modifier = Modifier.fillMaxWidth().animateItem().clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                coroutineScope.launch(Dispatchers.IO) {
+                                                    val newTags = activeTagsList + "Tactical Maintenance"
+                                                    dao.insertTags(DailyTagEntity(date = pageDate, tags = newTags.joinToString(",")))
+                                                    MacroWidget().updateAll(context)
+                                                }
+                                            }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.HealthAndSafety,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(32.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Column {
+                                                    Text(
+                                                        text = "Tactical Maintenance Advised",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        text = "Tap to authorize. Target 0 deficit today to prevent cognitive fatigue and protect your streak.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // --- V7.5: SUNDAY EXECUTIVE BRIEF TRIGGER ---
                                 if (isSunday && geminiApiStr.isNotBlank() && !hasBrief) {
                                     item {
                                         var isGeneratingBrief by remember { mutableStateOf(false) }
@@ -1278,12 +1383,11 @@ fun FoodTrackerScreen(
 
                                             Spacer(modifier = Modifier.height(12.dp))
 
-                                            // --- V8.0: MULTI-AI BLOCK PARSER ---
                                             val rescuePrefix = "🚨 AI Rescue Strategy:\n"
                                             val briefPrefix = "🧠 Weekly Executive Brief:\n"
 
                                             var cleanNotes = insightText
-                                            val aiBlocks = mutableListOf<Pair<String, String>>() // Pair(Prefix, Content)
+                                            val aiBlocks = mutableListOf<Pair<String, String>>()
 
                                             if (cleanNotes.contains(rescuePrefix)) {
                                                 val split = cleanNotes.split(rescuePrefix)

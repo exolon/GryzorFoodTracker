@@ -48,6 +48,9 @@ data class DayCount(
 
 @Dao
 interface MealDao {
+    @Query("SELECT * FROM meals")
+    fun getAllMeals(): Flow<List<MealEntity>>
+
     @Query("SELECT * FROM meals WHERE date = :targetDate ORDER BY time ASC")
     fun getMealsForDate(targetDate: String): Flow<List<MealEntity>>
 

@@ -51,7 +51,7 @@ val CURRENT_STREAK_KEY = intPreferencesKey("current_streak")
 val LONGEST_STREAK_KEY = intPreferencesKey("longest_streak")
 val SHIELD_COUNT_KEY = intPreferencesKey("shield_count")
 val PERFECT_DAYS_KEY = intPreferencesKey("perfect_days_count")
-val LAST_EVALUATED_DATE_KEY = stringPreferencesKey("last_eval_date_v7_fixed_history")
+val LAST_EVALUATED_DATE_KEY = stringPreferencesKey("last_eval_date_v8_adaptive")
 
 val DEFAULT_TAGS = setOf("Grind", "Recovery", "High Protein", "Upper Body Bias", "Rest")
 
