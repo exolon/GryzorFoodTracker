@@ -153,7 +153,6 @@ fun AnalyticsScreen(
     val diffKcal = curKcalAvg - prevKcalAvg
     val diffDef = curDefAvg - prevDefAvg
 
-    // --- V8.0 FACTOR STATS ENGINE ---
     val frictionStats = remember(allTags, allMetrics, phasePreference) {
         val stats = mutableListOf<FactorStat>()
         for (level in 1..5) {
@@ -347,8 +346,9 @@ fun AnalyticsScreen(
                 ),
             contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp)
         ) {
+            // REDUCED MOTION: Decreased base multiplier from 40.dp to 20.dp
             fun elasticMod(index: Int) = Modifier
-                .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
+                .offset(y = (20.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
             item {
@@ -552,12 +552,13 @@ fun AnalyticsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // REDUCED MOTION: Reduced gyro pitch multiplier
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
                                 .graphicsLayer {
-                                    rotationX = (gyroPitch * 0.15f).coerceIn(-8f, 8f)
-                                    rotationY = (gyroRoll * 0.15f).coerceIn(-8f, 8f)
+                                    rotationX = (gyroPitch * 0.05f).coerceIn(-8f, 8f)
+                                    rotationY = (gyroRoll * 0.05f).coerceIn(-8f, 8f)
                                     cameraDistance = 12f * density
                                 },
                             shape = RoundedCornerShape(16.dp),
@@ -597,8 +598,8 @@ fun AnalyticsScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .graphicsLayer {
-                                    rotationX = (gyroPitch * 0.15f).coerceIn(-8f, 8f)
-                                    rotationY = (gyroRoll * 0.15f).coerceIn(-8f, 8f)
+                                    rotationX = (gyroPitch * 0.05f).coerceIn(-8f, 8f)
+                                    rotationY = (gyroRoll * 0.05f).coerceIn(-8f, 8f)
                                     cameraDistance = 12f * density
                                 },
                             shape = RoundedCornerShape(16.dp),
@@ -756,7 +757,6 @@ fun AnalyticsScreen(
                 }
             }
 
-            // --- V8.0 Biological & Cognitive Constraints Matrix ---
             item {
                 Column(modifier = elasticMod(3).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1318,6 +1318,7 @@ fun AnalyticsScreen(
                 }
             }
 
+            // --- V8.0/V7.51 Upgraded Body Composition Graph ---
             item {
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val secColor = MaterialTheme.colorScheme.secondary
@@ -1335,7 +1336,6 @@ fun AnalyticsScreen(
                     fontWeight = FontWeight.Bold,
                     color = secColor.copy(alpha = 0.8f)
                 )
-
                 val tooltipStyle = TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -1343,38 +1343,79 @@ fun AnalyticsScreen(
                 )
 
                 var tappedComp by remember { mutableStateOf<Triple<Offset, String, Color>?>(null) }
+                var showCompSignalOverlay by remember { mutableStateOf(false) } // Added signal state
                 var lastCompHapticIndex by remember { mutableIntStateOf(-1) }
 
                 Column(modifier = elasticMod(5).fillMaxWidth().padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 32.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Body Composition Trend",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showCompTooltip = !showCompTooltip
-                                }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.QuestionMark,
-                                contentDescription = "Info",
-                                modifier = Modifier.padding(3.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Body Composition Trend",
+                                style = MaterialTheme.typography.labelLarge
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showCompTooltip = !showCompTooltip
+                                    }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.QuestionMark,
+                                    contentDescription = "Info",
+                                    modifier = Modifier.padding(3.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Added Raw/Signal Toggle for Comp
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showCompSignalOverlay = false
+                                    }
+                                    .background(if (!showCompSignalOverlay) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Raw",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (!showCompSignalOverlay) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showCompSignalOverlay = true
+                                    }
+                                    .background(if (showCompSignalOverlay) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Signal",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (showCompSignalOverlay) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
-                    Text(
-                        text = "Split-pane bounds to prevent line crossing.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
 
                     AnimatedVisibility(visible = showCompTooltip) {
                         Surface(
@@ -1383,7 +1424,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Interactive drag-to-scrub vector graph. The canvas is segmented: the top 47.5% is dedicated entirely to Weight variance, and the bottom 47.5% is dedicated to Body Fat variance, ensuring the trend lines never visually cross.",
+                                text = "Interactive drag-to-scrub vector graph. The canvas is segmented: the top half is Weight, the bottom is Body Fat. Toggle 'Signal' to see your 7-day weighted moving average to filter daily noise.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -1392,9 +1433,37 @@ fun AnalyticsScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    val dynamicBounds = remember(last31Days, allMeasurements) {
-                        val wList = last31Days.mapNotNull { d -> allMeasurements.find { it.date == d }?.weight?.toFloatOrNull() }
-                        val fList = last31Days.mapNotNull { d -> allMeasurements.find { it.date == d }?.bodyFat?.toFloatOrNull() }
+                    // Added 7-day rolling average nodes for Weight and Fat
+                    data class CompNode(
+                        val date: String,
+                        val rawW: Float?,
+                        val rawF: Float?,
+                        val avgW: Float?,
+                        val avgF: Float?
+                    )
+
+                    val compNodes = remember(last31Days, allMeasurements) {
+                        last31Days.map { date ->
+                            val measure = allMeasurements.find { it.date == date }
+                            val rW = measure?.weight?.toFloatOrNull()
+                            val rF = measure?.bodyFat?.toFloatOrNull()
+
+                            val window = (6 downTo 0).map { LocalDate.parse(date).minusDays(it.toLong()).toString() }
+                            val windowMeasures = allMeasurements.filter { window.contains(it.date) }
+
+                            val wList = windowMeasures.mapNotNull { it.weight.toDoubleOrNull() }
+                            val fList = windowMeasures.mapNotNull { it.bodyFat.toDoubleOrNull() }
+
+                            val aW = if (wList.isNotEmpty()) wList.average().toFloat() else null
+                            val aF = if (fList.isNotEmpty()) fList.average().toFloat() else null
+
+                            CompNode(date, rW, rF, aW, aF)
+                        }
+                    }
+
+                    val dynamicBounds = remember(compNodes) {
+                        val wList = compNodes.mapNotNull { it.rawW } + compNodes.mapNotNull { it.avgW }
+                        val fList = compNodes.mapNotNull { it.rawF } + compNodes.mapNotNull { it.avgF }
 
                         val wMaxRaw = wList.maxOrNull() ?: 85f
                         val wMinRaw = wList.minOrNull() ?: 66f
@@ -1424,7 +1493,7 @@ fun AnalyticsScreen(
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(allMeasurements, dynamicBounds) {
+                                    .pointerInput(compNodes, showCompSignalOverlay, dynamicBounds) {
                                         awaitEachGesture {
                                             while (true) {
                                                 val event = awaitPointerEvent()
@@ -1454,37 +1523,36 @@ fun AnalyticsScreen(
                                                         lastCompHapticIndex = cIndex
                                                     }
 
-                                                    val date = last31Days[cIndex]
-                                                    val prevDate = if (cIndex > 0) last31Days[cIndex - 1] else null
-
-                                                    val measure = allMeasurements.find { it.date == date }
-                                                    val prevMeasure = if (prevDate != null) allMeasurements.find { it.date == prevDate } else null
+                                                    val node = compNodes[cIndex]
+                                                    val prevNode = if (cIndex > 0) compNodes[cIndex - 1] else null
 
                                                     val xPos = cIndex * stepX
                                                     val yPoints = mutableListOf<Triple<Offset, String, Color>>()
 
-                                                    val w = measure?.weight?.toFloatOrNull()
-                                                    val pW = prevMeasure?.weight?.toFloatOrNull()
-                                                    if (w != null) {
+                                                    val wToUse = if (showCompSignalOverlay && node.avgW != null) node.avgW else node.rawW
+                                                    val pW = if (showCompSignalOverlay && prevNode?.avgW != null) prevNode.avgW else prevNode?.rawW
+
+                                                    if (wToUse != null) {
                                                         val deltaStr = if (pW != null) {
-                                                            val d = w - pW
+                                                            val d = wToUse - pW
                                                             val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
                                                             " ($sign ${String.format("%.1f", abs(d))})"
                                                         } else ""
-                                                        val wY = wRangeHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * wRangeHeight
-                                                        yPoints.add(Triple(Offset(xPos, wY), "${w}kg$deltaStr", primaryColor))
+                                                        val wY = wRangeHeight - ((wToUse.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * wRangeHeight
+                                                        yPoints.add(Triple(Offset(xPos, wY), "${String.format("%.1f", wToUse)}kg$deltaStr", primaryColor))
                                                     }
 
-                                                    val f = measure?.bodyFat?.toFloatOrNull()
-                                                    val pF = prevMeasure?.bodyFat?.toFloatOrNull()
-                                                    if (f != null) {
+                                                    val fToUse = if (showCompSignalOverlay && node.avgF != null) node.avgF else node.rawF
+                                                    val pF = if (showCompSignalOverlay && prevNode?.avgF != null) prevNode.avgF else prevNode?.rawF
+
+                                                    if (fToUse != null) {
                                                         val deltaStr = if (pF != null) {
-                                                            val d = f - pF
+                                                            val d = fToUse - pF
                                                             val sign = if (d > 0) "↑" else if (d < 0) "↓" else "="
                                                             " ($sign ${String.format("%.1f", abs(d))})"
                                                         } else ""
-                                                        val fY = fStartY - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * fRangeHeight
-                                                        yPoints.add(Triple(Offset(xPos, fY), "${f}%$deltaStr", secColor))
+                                                        val fY = fStartY - ((fToUse.coerceIn(minFat, maxFat) - minFat) / rangeF) * fRangeHeight
+                                                        yPoints.add(Triple(Offset(xPos, fY), "${String.format("%.1f", fToUse)}%$deltaStr", secColor))
                                                     }
 
                                                     tappedComp = yPoints.minByOrNull { abs(it.first.y - position.y) }
@@ -1512,6 +1580,14 @@ fun AnalyticsScreen(
                                 val rangeW = maxWeight - minWeight
                                 val rangeF = maxFat - minFat
 
+                                // Sleek middle divider line
+                                drawLine(
+                                    color = Color.Gray.copy(alpha = 0.3f),
+                                    start = Offset(0f, graphHeight * 0.5f),
+                                    end = Offset(size.width, graphHeight * 0.5f),
+                                    strokeWidth = 2f
+                                )
+
                                 if (animProgress.value > 0.8f) {
                                     val wFormat = if (maxWeight % 1 == 0f) maxWeight.toInt().toString() else maxWeight.toString()
                                     val wMinFormat = if (minWeight % 1 == 0f) minWeight.toInt().toString() else minWeight.toString()
@@ -1534,23 +1610,26 @@ fun AnalyticsScreen(
 
                                 val wPath = Path()
                                 val fPath = Path()
+                                val wAvgPath = Path()
+                                val fAvgPath = Path()
                                 val wAreaPath = Path()
                                 val fAreaPath = Path()
                                 var firstW = true
                                 var firstF = true
+                                var firstAvgW = true
+                                var firstAvgF = true
                                 var lastWX = 0f
                                 var lastFX = 0f
 
-                                last31Days.forEachIndexed { index, date ->
+                                compNodes.forEachIndexed { index, node ->
                                     if (index % 6 == 0 || index == 30) {
-                                        val layoutResult = textMeasurer.measure(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
+                                        val layoutResult = textMeasurer.measure(LocalDate.parse(node.date).format(DateTimeFormatter.ofPattern("M/d")), dateStyle)
                                         drawText(textLayoutResult = layoutResult, topLeft = Offset(index * stepX - (layoutResult.size.width / 2f), size.height - 20f))
                                     }
 
-                                    val measure = allMeasurements.find { it.date == date }
                                     val x = index * stepX
 
-                                    val w = measure?.weight?.toFloatOrNull()
+                                    val w = node.rawW
                                     if (w != null) {
                                         val targetY = wRangeHeight - ((w.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * wRangeHeight
                                         val y = wRangeHeight + (targetY - wRangeHeight) * animProgress.value
@@ -1560,7 +1639,7 @@ fun AnalyticsScreen(
                                         drawCircle(color = primaryColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
                                     }
 
-                                    val f = measure?.bodyFat?.toFloatOrNull()
+                                    val f = node.rawF
                                     if (f != null) {
                                         val targetY = fStartY - ((f.coerceIn(minFat, maxFat) - minFat) / rangeF) * fRangeHeight
                                         val y = fStartY + (targetY - fStartY) * animProgress.value
@@ -1568,6 +1647,22 @@ fun AnalyticsScreen(
                                         if (firstF) { fPath.moveTo(x, y); fAreaPath.moveTo(x, graphHeight); fAreaPath.lineTo(x, y); firstF = false }
                                         else { fPath.lineTo(x, y); fAreaPath.lineTo(x, y) }
                                         drawCircle(color = secColor.copy(alpha = animProgress.value), radius = 6f, center = Offset(x, y))
+                                    }
+
+                                    val aW = node.avgW
+                                    if (aW != null) {
+                                        val targetY = wRangeHeight - ((aW.coerceIn(minWeight, maxWeight) - minWeight) / rangeW) * wRangeHeight
+                                        val y = wRangeHeight + (targetY - wRangeHeight) * animProgress.value
+                                        if (firstAvgW) { wAvgPath.moveTo(x, y); firstAvgW = false }
+                                        else { wAvgPath.lineTo(x, y) }
+                                    }
+
+                                    val aF = node.avgF
+                                    if (aF != null) {
+                                        val targetY = fStartY - ((aF.coerceIn(minFat, maxFat) - minFat) / rangeF) * fRangeHeight
+                                        val y = fStartY + (targetY - fStartY) * animProgress.value
+                                        if (firstAvgF) { fAvgPath.moveTo(x, y); firstAvgF = false }
+                                        else { fAvgPath.lineTo(x, y) }
                                     }
                                 }
 
@@ -1585,6 +1680,11 @@ fun AnalyticsScreen(
 
                                 drawPath(path = wPath, color = primaryColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
                                 drawPath(path = fPath, color = secColor.copy(alpha = animProgress.value), style = Stroke(width = 3f, cap = StrokeCap.Round))
+
+                                if (showCompSignalOverlay) {
+                                    drawPath(path = wAvgPath, color = primaryColor.copy(alpha = 0.6f * animProgress.value), style = Stroke(width = 5f, cap = StrokeCap.Round))
+                                    drawPath(path = fAvgPath, color = secColor.copy(alpha = 0.6f * animProgress.value), style = Stroke(width = 5f, cap = StrokeCap.Round))
+                                }
 
                                 tappedComp?.let { (offset, text, color) ->
                                     val textLayout = textMeasurer.measure(text, tooltipStyle)

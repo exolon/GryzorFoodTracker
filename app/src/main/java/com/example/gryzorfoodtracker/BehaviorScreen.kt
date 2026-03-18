@@ -3,6 +3,7 @@ package com.example.gryzorfoodtracker
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,7 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -93,6 +101,23 @@ fun BehaviorScreen(
             val mean = intakes.average()
             val variance = intakes.map { (it - mean).pow(2) }.average()
             sqrt(variance).toInt()
+        }
+    }
+
+    // --- V7.51 VIX TRAILING HISTORY ---
+    val vixHistory = remember(daysReversed, allMetrics) {
+        daysReversed.map { targetDate ->
+            val targetLocalDate = LocalDate.parse(targetDate)
+            val windowDates = (13 downTo 0).map { targetLocalDate.minusDays(it.toLong()).toString() }
+            val windowIntakes = allMetrics.filter { windowDates.contains(it.date) }.mapNotNull { it.totalKcal.toDoubleOrNull() }
+
+            if (windowIntakes.size < 2) {
+                0f
+            } else {
+                val mean = windowIntakes.average()
+                val variance = windowIntakes.map { (it - mean).pow(2) }.average()
+                sqrt(variance).toFloat()
+            }
         }
     }
 
@@ -492,7 +517,7 @@ fun BehaviorScreen(
                             modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
                         ) {
                             Text(
-                                text = "Calculation: [Streak Days x 5] + [Deficit Intensity] + [Metabolic Volatility] + [Sleep Penalty]. Caps at 100%. 50%+ indicates moderate fatigue, 80%+ indicates critical cognitive depletion.",
+                                text = "Calculation: [Streak Days x 5] + [Deficit Intensity] + [Metabolic Volatility] + [Sleep Penalty].\nCaps at 100%. 50%+ indicates moderate fatigue, 80%+ indicates critical cognitive depletion.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
@@ -563,7 +588,7 @@ fun BehaviorScreen(
                                     modifier = Modifier.height(16.dp)
                                 )
 
-                                val riskText = if (burnoutRisk >= 80) "Critical Fatigue. Willpower reserves depleted. A tactical Maintenance day is mathematically required." else if (burnoutRisk >= 50) "Moderate Fatigue. Deficit streak is taxing the system." else "System Stable. High cognitive bandwidth available."
+                                val riskText = if (burnoutRisk >= 80) "Critical Fatigue.\nWillpower reserves depleted. A tactical Maintenance day is mathematically required." else if (burnoutRisk >= 50) "Moderate Fatigue.\nDeficit streak is taxing the system." else "System Stable. High cognitive bandwidth available."
 
                                 Surface(
                                     color = meterColor.copy(alpha = 0.1f),
@@ -647,7 +672,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showVixTooltip) {
                                     Text(
-                                        text = "Calculation: Standard Deviation (σ) of daily intake over 14 days. High volatility (>300) indicates erratic eating patterns and metabolic stress.",
+                                        text = "Calculation: Standard Deviation (σ) of daily intake over 14 days.\nHigh volatility (>300) indicates erratic eating patterns and metabolic stress. Sparkline shows 14-day trailing VIX trend.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -678,6 +703,69 @@ fun BehaviorScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
+
+                                // --- V7.51 VIX TRAILING SPARKLINE ---
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                if (vixHistory.any { it > 0f }) {
+                                    Canvas(modifier = Modifier.fillMaxWidth().height(36.dp)) {
+                                        val maxVix = vixHistory.maxOrNull()?.coerceAtLeast(350f) ?: 350f
+                                        val minVix = 0f
+                                        val range = maxVix - minVix
+                                        val stepX = size.width / (vixHistory.size - 1).coerceAtLeast(1)
+
+                                        val path = Path()
+                                        val areaPath = Path()
+                                        var first = true
+
+                                        areaPath.moveTo(0f, size.height)
+
+                                        vixHistory.forEachIndexed { index, v ->
+                                            val x = index * stepX
+                                            val y = size.height - ((v - minVix) / range) * size.height
+                                            if (first) {
+                                                path.moveTo(x, y)
+                                                areaPath.lineTo(x, y)
+                                                first = false
+                                            } else {
+                                                path.lineTo(x, y)
+                                                areaPath.lineTo(x, y)
+                                            }
+                                        }
+
+                                        areaPath.lineTo(size.width, size.height)
+                                        areaPath.close()
+
+                                        drawPath(
+                                            path = areaPath,
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(vixColor.copy(alpha = 0.2f), Color.Transparent)
+                                            )
+                                        )
+
+                                        drawPath(
+                                            path = path,
+                                            color = vixColor,
+                                            style = Stroke(
+                                                width = 3f,
+                                                cap = StrokeCap.Round,
+                                                join = StrokeJoin.Round
+                                            )
+                                        )
+
+                                        // Draw the 300 SD Danger Threshold
+                                        val thresholdY = size.height - ((300f - minVix) / range) * size.height
+                                        if (thresholdY in 0f..size.height) {
+                                            drawLine(
+                                                color = Color.Gray.copy(alpha = 0.4f),
+                                                start = Offset(0f, thresholdY),
+                                                end = Offset(size.width, thresholdY),
+                                                strokeWidth = 2f,
+                                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -828,7 +916,7 @@ fun BehaviorScreen(
                                     modifier = Modifier.padding(start = 0.dp, top = 12.dp, end = 0.dp, bottom = 0.dp)
                                 ) {
                                     Text(
-                                        text = "Calculation: Sums your net caloric deficit over the strict 7-day trailing window and divides by 7,700 kcal to calculate theoretical fat delta. Compares this mathematically against your actual scale change to validate your TDEE assumption.",
+                                        text = "Calculation: Sums your net caloric deficit over the strict 7-day trailing window and divides by 7,700 kcal to calculate theoretical fat delta.\nCompares this mathematically against your actual scale change to validate your TDEE assumption.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
@@ -853,7 +941,6 @@ fun BehaviorScreen(
                                         color = MaterialTheme.colorScheme.outline
                                     )
 
-                                    val expectedStr = String.format("%.2f kg", weeklyPnL.first)
                                     val prefixE = if (weeklyPnL.first > 0) "-" else if (weeklyPnL.first < 0) "+" else ""
 
                                     Text(
@@ -885,7 +972,6 @@ fun BehaviorScreen(
                                             color = MaterialTheme.colorScheme.outline
                                         )
                                     } else {
-                                        val actStr = String.format("%.2f kg", weeklyPnL.second!!)
                                         val prefixA = if (weeklyPnL.second!! > 0) "-" else if (weeklyPnL.second!! < 0) "+" else ""
 
                                         val varianceColor = if (abs((weeklyPnL.first) - (weeklyPnL.second!!)) <= 0.5) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
@@ -972,7 +1058,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showMomentumTooltip) {
                                     Text(
-                                        text = "Calculation: Compares your 3-Day Weighted Moving Average (50% / 33% / 17%) vs 14-Day Trailing Avg. Identifies if your current trend is accelerating or decaying without overreacting to a single off-day.",
+                                        text = "Calculation: Compares your 3-Day Weighted Moving Average (50% / 33% / 17%) vs 14-Day Trailing Avg.\nIdentifies if your current trend is accelerating or decaying without overreacting to a single off-day.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -1258,7 +1344,7 @@ fun BehaviorScreen(
                                     modifier = Modifier.padding(start = 0.dp, top = 12.dp, end = 0.dp, bottom = 0.dp)
                                 ) {
                                     Text(
-                                        text = "Calculation: Compares your deficit success rate on days logged with Good Sleep (Scores 4-5) versus Poor Sleep (Scores 1-2). Proves mathematically how compromised sleep degrades your cognitive discipline.",
+                                        text = "Calculation: Compares your deficit success rate on days logged with Good Sleep (Scores 4-5) versus Poor Sleep (Scores 1-2).\nProves mathematically how compromised sleep degrades your cognitive discipline.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
@@ -1389,7 +1475,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showRecoveryTooltip) {
                                     Text(
-                                        text = "Calculation: Ratio of 'Grind' to ('Rest' + 'Recovery') tags over 14 days. Grind days logged on Poor Sleep (1-2) are taxed at 1.5x. < 3.0 = Sustainable, 3.0+ = High Strain, 4.0+ = Critical Debt.",
+                                        text = "Calculation: Ratio of 'Grind' to ('Rest' + 'Recovery') tags over 14 days.\nGrind days logged on Poor Sleep (1-2) are taxed at 1.5x.\n< 3.0 = Sustainable, 3.0+ = High Strain, 4.0+ = Critical Debt.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)
@@ -1477,7 +1563,7 @@ fun BehaviorScreen(
 
                                 AnimatedVisibility(visible = showVelocityTooltip) {
                                     Text(
-                                        text = "Calculation: Trailing 14-day weight velocity projected linearly against your Target Weight (set in Options). Phase-aware (Cut/Bulk).",
+                                        text = "Calculation: Trailing 14-day weight velocity projected linearly against your Target Weight (set in Options).\nPhase-aware (Cut/Bulk).",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.padding(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 0.dp)

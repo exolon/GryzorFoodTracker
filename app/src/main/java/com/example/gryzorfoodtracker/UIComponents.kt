@@ -625,8 +625,9 @@ fun MealCard(
                     onClick()
                 }
                 .graphicsLayer {
-                    rotationX = (pitch * 0.15f).coerceIn(-8f, 8f)
-                    rotationY = (roll * 0.15f).coerceIn(-8f, 8f)
+                    // CHANGE THESE TWO MULTIPLIERS TO 0.05f
+                    rotationX = (pitch * 0.05f).coerceIn(-8f, 8f)
+                    rotationY = (roll * 0.05f).coerceIn(-8f, 8f)
                     cameraDistance = 12f * density
                 },
             shape = RoundedCornerShape(24.dp),

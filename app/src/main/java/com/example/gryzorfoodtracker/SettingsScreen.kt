@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -64,6 +65,7 @@ import kotlin.random.Random
 val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
 val FASTING_TARGET_KEY = stringPreferencesKey("fasting_target")
 val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
+val TARGET_FAT_KEY = stringPreferencesKey("target_fat") // Added Target Fat Key
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +91,10 @@ fun SettingsScreen(
         .map { it[TARGET_WEIGHT_KEY] ?: "" }
         .collectAsState("")
 
+    val targetFatStr by context.dataStore.data
+        .map { it[TARGET_FAT_KEY] ?: "" }
+        .collectAsState("")
+
     val fastingTargetStr by context.dataStore.data
         .map { it[FASTING_TARGET_KEY] ?: "" }
         .collectAsState("")
@@ -112,14 +118,27 @@ fun SettingsScreen(
     var isCheckingUpdate by remember { mutableStateOf(false) }
 
     var localWeightState by remember { mutableStateOf(TextFieldValue(targetWeightStr)) }
+    var localFatState by remember { mutableStateOf(TextFieldValue(targetFatStr)) }
     var localFastState by remember { mutableStateOf(TextFieldValue(fastingTargetStr)) }
     var localApiState by remember { mutableStateOf(TextFieldValue(geminiApiStr)) }
+
+    // State to track if the API key should be hidden
+    var isApiKeyHidden by remember(geminiApiStr) { mutableStateOf(geminiApiStr.isNotBlank()) }
 
     LaunchedEffect(targetWeightStr) {
         if (localWeightState.text != targetWeightStr) {
             localWeightState = localWeightState.copy(
                 text = targetWeightStr,
                 selection = TextRange(targetWeightStr.length)
+            )
+        }
+    }
+
+    LaunchedEffect(targetFatStr) {
+        if (localFatState.text != targetFatStr) {
+            localFatState = localFatState.copy(
+                text = targetFatStr,
+                selection = TextRange(targetFatStr.length)
             )
         }
     }
@@ -258,7 +277,7 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = { Text(text = "App Manual (v7.5)") },
+            title = { Text(text = "App Manual (v7.51)") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     item {
@@ -325,6 +344,7 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
+                        "v7.51" to "The Clarity Pass: Added Target Fat % field. Upgraded the Body Composition graph with a 7-day trailing signal overlay and a crisp UI separator. Refined card animation physics to reduce visual noise. Updated API key visual security flow.",
                         "v7.5" to "The Intelligence Update: Shifted focus from tactical tracking to macro-intelligence. Built the 'Sunday Executive Brief' Macro-AI for automated weekly strategic reviews. Injected the 'Biological & Cognitive Constraints Matrix' to visualize the direct correlation between physical/mental fatigue and dietary compliance.",
                         "v7.0" to "The Resilience Engine: Built an active gamified micro-economy to prevent the 'Abstinence Violation Effect'. Every 6 perfect days earns a Shield (max 3) which automatically protects your momentum if you miss a target. Added dismissible UI cards for AI Rescue Strategies.",
                         "v6.0" to "The Active Compass Pass: Transformed Gryzor into a proactive behavioral copilot. Added a 'Salvage My Day' AI magic wand to generate hyper-specific, context-aware rescue meals when deficits slip. Introduced a Predictive Habit Engine (WorkManager) that analyzes your 7-day logging patterns and sends actionable Android notifications to 1-tap log or edit your most frequent meals.",
@@ -395,7 +415,7 @@ fun SettingsScreen(
             contentPadding = innerPadding
         ) {
             fun elasticMod(index: Int) = Modifier
-                .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
+                .offset(y = (20.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -430,16 +450,47 @@ fun SettingsScreen(
                             value = localApiState,
                             onValueChange = { newVal ->
                                 localApiState = newVal
-                                coroutineScope.launch {
-                                    context.dataStore.edit { it[GEMINI_API_KEY] = newVal.text }
-                                }
+                                isApiKeyHidden = false // Reveal while typing
                             },
                             label = { Text(text = "Gemini API Key") },
                             placeholder = { Text(text = "Paste key to enable Auto-Macros") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true,
-                            visualTransformation = PasswordVisualTransformation()
+                            visualTransformation = if (isApiKeyHidden) PasswordVisualTransformation() else VisualTransformation.None,
+                            trailingIcon = {
+                                if (!isApiKeyHidden && localApiState.text.isNotBlank()) {
+                                    IconButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            coroutineScope.launch {
+                                                context.dataStore.edit { it[GEMINI_API_KEY] = localApiState.text }
+                                            }
+                                            isApiKeyHidden = true // Hide upon saving
+                                            Toast.makeText(context, "API Key Saved", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = "Save Key",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                } else if (isApiKeyHidden) {
+                                    IconButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            isApiKeyHidden = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Visibility,
+                                            contentDescription = "Reveal Key",
+                                            tint = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            }
                         )
 
                         Row(
@@ -580,6 +631,26 @@ fun SettingsScreen(
                         )
 
                         OutlinedTextField(
+                            value = localFatState,
+                            onValueChange = { newVal ->
+                                localFatState = newVal
+                                coroutineScope.launch {
+                                    context.dataStore.edit { it[TARGET_FAT_KEY] = newVal.text }
+                                }
+                            },
+                            label = { Text(text = "Target Fat (%)") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 8.dp)
+                    ) {
+                        OutlinedTextField(
                             value = localFastState,
                             onValueChange = { newVal ->
                                 localFastState = newVal
@@ -589,7 +660,7 @@ fun SettingsScreen(
                             },
                             label = { Text(text = "Fast Target (hrs)") },
                             placeholder = { Text(text = "Optional") },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                         )
@@ -1008,7 +1079,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "7.5"
+                                            val currentVersion = "7.51"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1150,7 +1221,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v7.5",
+                        text = "v7.51",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )

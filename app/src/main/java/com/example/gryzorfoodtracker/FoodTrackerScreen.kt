@@ -907,7 +907,7 @@ fun FoodTrackerScreen(
                                     Box(
                                         modifier = Modifier
                                             .animateItem()
-                                            .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
+                                            .offset(y = (20.dp * (1f - entrance.value) * (index + 1)))
                                             .alpha(entrance.value)
                                     ) {
                                         MealCard(
