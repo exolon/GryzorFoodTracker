@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.gryzorfoodtracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "8.0"
+        versionCode = 42
+        versionName = "8.5"
         // -----------------------
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

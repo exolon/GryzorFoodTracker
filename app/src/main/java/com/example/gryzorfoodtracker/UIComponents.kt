@@ -574,10 +574,26 @@ fun MealCard(
         else -> if (isSystemDark) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
     }
 
+    // --- V8.0 Parse hidden Trace Data ---
+    val traceMatch = Regex("""""", RegexOption.DOT_MATCHES_ALL).find(entry.description)
+    val traceData = traceMatch?.groupValues?.get(1)
+    val cleanedOfTrace = entry.description.replace(Regex("""""", RegexOption.DOT_MATCHES_ALL), "").trim()
+
     val macroRegex = Regex("""\s*\[(.*?)\]$""")
-    val match = macroRegex.find(entry.description)
-    val cleanDesc = if (match != null) entry.description.replace(match.value, "").trim() else entry.description
+    val match = macroRegex.find(cleanedOfTrace)
+    val cleanDesc = if (match != null) cleanedOfTrace.replace(match.value, "").trim() else cleanedOfTrace
     val macrosStr = match?.groups?.get(1)?.value
+
+    var showTraceDialog by remember { mutableStateOf(false) }
+
+    if (showTraceDialog && traceData != null) {
+        AlertDialog(
+            onDismissRequest = { showTraceDialog = false },
+            title = { Text("Gemini Engine Trace") },
+            text = { Text(traceData, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { TextButton(onClick = { showTraceDialog = false }) { Text("Close") } }
+        )
+    }
 
     SwipeToDismissBox(
         state = dismissState,
@@ -625,7 +641,6 @@ fun MealCard(
                     onClick()
                 }
                 .graphicsLayer {
-                    // CHANGE THESE TWO MULTIPLIERS TO 0.05f
                     rotationX = (pitch * 0.05f).coerceIn(-8f, 8f)
                     rotationY = (roll * 0.05f).coerceIn(-8f, 8f)
                     cameraDistance = 12f * density
@@ -683,27 +698,43 @@ fun MealCard(
                     )
                     if (macrosStr != null) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
                             ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = macrosStr,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            // --- V8.0 Render AI Trace Button ---
+                            if (traceData != null) {
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Icon(
-                                    imageVector = Icons.Filled.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = macrosStr,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    fontWeight = FontWeight.Bold
+                                    imageVector = Icons.Filled.Troubleshoot,
+                                    contentDescription = "View AI Trace",
+                                    tint = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(16.dp).clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showTraceDialog = true
+                                    }
                                 )
                             }
                         }
@@ -729,7 +760,9 @@ suspend fun fetchMacros(context: Context, apiKey: String, description: String): 
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
 
-            val prompt = "Estimate the macros for this meal: '$description'. Return ONLY a JSON object in this exact format: {\"kcal\": 350, \"p\": 20, \"f\": 15, \"c\": 30}. Do not use markdown formatting."
+            // V8.0: Dual-purpose prompt (Food + Workouts)
+            val prompt = "Analyze this input: '$description'. If it is food, return ONLY a JSON object: {\"kcal\": 350, \"p\": 20, \"f\": 15, \"c\": 30}. If it is a physical workout/exercise, return ONLY a JSON object representing calories burned as a negative number, with macros as 0: {\"kcal\": -400, \"p\": 0, \"f\": 0, \"c\": 0}. Do not use markdown."
+
             val payload = JSONObject().apply {
                 put("contents", JSONArray().apply {
                     put(JSONObject().apply {
@@ -758,14 +791,16 @@ suspend fun fetchMacros(context: Context, apiKey: String, description: String): 
                     .getString("text")
 
                 val cleanJsonString = textResult.replace("```json", "").replace("```", "").trim()
-
                 val macroJson = JSONObject(cleanJsonString)
+
                 val kcal = macroJson.optInt("kcal", 0)
                 val p = macroJson.optInt("p", 0)
                 val f = macroJson.optInt("f", 0)
                 val c = macroJson.optInt("c", 0)
 
-                " [$kcal kcal | ${p}g P | ${f}g F | ${c}g C]"
+                // Package the raw trace silently into the string
+                val traceData = ""
+                " [$kcal kcal | ${p}g P | ${f}g F | ${c}g C] $traceData"
             } else {
                 val errorMsg = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown API Error"
                 withContext(Dispatchers.Main) {
@@ -958,7 +993,8 @@ fun AddMealDialog(
 
     val historicalSuggestions by dao.getSuggestions(selectedMealType).collectAsState(initial = emptyList())
 
-    val filteredSuggestions = historicalSuggestions.filter {
+    // Strip traces from historical suggestions so they don't pollute the UI picker
+    val filteredSuggestions = historicalSuggestions.map { it.replace(Regex("""""", RegexOption.DOT_MATCHES_ALL), "").trim() }.distinct().filter {
         it.contains(mealText, ignoreCase = true) &&
                 it != mealText &&
                 !bannedSuggestions.contains(it)

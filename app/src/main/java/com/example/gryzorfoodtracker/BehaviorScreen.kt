@@ -54,7 +54,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BehaviorScreen(
     navController: NavController,
@@ -80,12 +80,17 @@ fun BehaviorScreen(
     val allMetrics by dao.getAllMetrics().collectAsState(initial = emptyList())
     val allTags by dao.getAllTags().collectAsState(initial = emptyList())
     val allMeasurements by dao.getAllMeasurements().collectAsState(initial = emptyList())
+    val allMeals by dao.getAllMeals().collectAsState(initial = emptyList())
 
     val last14Days = remember(today) {
         (13 downTo 0).map { today.minusDays(it.toLong()).toString() }
     }
     val daysReversed = remember(last14Days) {
         last14Days.reversed()
+    }
+
+    val last31Days = remember(today) {
+        (30 downTo 0).map { today.minusDays(it.toLong()).toString() }
     }
 
     val vixScore = remember(last14Days, allMetrics) {
@@ -104,7 +109,6 @@ fun BehaviorScreen(
         }
     }
 
-    // --- V7.51 VIX TRAILING HISTORY ---
     val vixHistory = remember(daysReversed, allMetrics) {
         daysReversed.map { targetDate ->
             val targetLocalDate = LocalDate.parse(targetDate)
@@ -145,12 +149,10 @@ fun BehaviorScreen(
         }
     }
 
-    // --- V4.7 WEEKLY P&L LOGIC ---
     val weeklyPnL = remember(today, allMetrics, allMeasurements, phasePreference) {
         val last7Days = (6 downTo 0).map { today.minusDays(it.toLong()).toString() }
         val defSum = allMetrics.filter { last7Days.contains(it.date) }.sumOf { it.deficit.toDoubleOrNull() ?: 0.0 }
 
-        // 7700 kcal per kg of fat
         val expectedDelta = defSum / 7700.0
 
         val measures = allMeasurements.filter { last7Days.contains(it.date) }
@@ -160,7 +162,6 @@ fun BehaviorScreen(
         val actualDelta = if (measures.size >= 2) {
             val firstW = measures.first().second
             val lastW = measures.last().second
-            // Positive value means weight was lost, Negative means gained
             firstW - lastW
         } else {
             null
@@ -261,7 +262,6 @@ fun BehaviorScreen(
         }
     }
 
-    // --- V4.7 SUCCESS BLUEPRINT ---
     val successBlueprint = remember(today, allMetrics, allTags, phasePreference, customTags) {
         val last30Days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
         val winDays = last30Days.filter { d ->
@@ -461,11 +461,7 @@ fun BehaviorScreen(
                 .offset(y = (40.dp * (1f - entrance.value) * (index + 1)))
                 .alpha(entrance.value)
 
-            item {
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
-            }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
 
             // --- SECTION 1: BURNOUT METER ---
             item {
@@ -607,10 +603,81 @@ fun BehaviorScreen(
                 }
             }
 
-            // --- SECTION 2: SYSTEM ECONOMICS ---
+            // --- V8.0: KINETIC PUNCH CARD ---
             item {
                 Column(
                     modifier = elasticMod(1)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "Kinetic Output (30 Days)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            val days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                days.forEach { date ->
+                                    val dailyMeals = allMeals.filter { it.date == date }
+                                    val combinedDesc = dailyMeals.joinToString(" ") { it.description }.lowercase()
+                                    val color = when {
+                                        combinedDesc.contains("internal watt") -> Color(0xFFE53935)
+                                        combinedDesc.contains("rolling") || combinedDesc.contains("upper body bias") -> Color(0xFFFB8C00)
+                                        combinedDesc.contains("walk") || combinedDesc.contains("push up") -> Color(0xFF43A047)
+                                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(color)
+                                            .clickable {
+                                                navController.previousBackStackEntry?.savedStateHandle?.set("targetDate", date)
+                                                navController.popBackStack()
+                                            }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFE53935)))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Watts", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFFB8C00)))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Rolling", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF43A047)))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Light", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- SECTION 2: SYSTEM ECONOMICS ---
+            item {
+                Column(
+                    modifier = elasticMod(2)
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
                 ) {
@@ -704,7 +771,6 @@ fun BehaviorScreen(
                                     color = MaterialTheme.colorScheme.outline
                                 )
 
-                                // --- V7.51 VIX TRAILING SPARKLINE ---
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 if (vixHistory.any { it > 0f }) {
@@ -753,7 +819,6 @@ fun BehaviorScreen(
                                             )
                                         )
 
-                                        // Draw the 300 SD Danger Threshold
                                         val thresholdY = size.height - ((300f - minVix) / range) * size.height
                                         if (thresholdY in 0f..size.height) {
                                             drawLine(
@@ -853,7 +918,6 @@ fun BehaviorScreen(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    // --- V4.7 WEEKLY P&L CARD ---
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -993,7 +1057,7 @@ fun BehaviorScreen(
             // --- SECTION 3: ATTRIBUTION & TRENDS ---
             item {
                 Column(
-                    modifier = elasticMod(2)
+                    modifier = elasticMod(3)
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
                 ) {
@@ -1174,7 +1238,6 @@ fun BehaviorScreen(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    // --- V4.7 SUCCESS BLUEPRINT CARD ---
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -1269,7 +1332,7 @@ fun BehaviorScreen(
             // --- SECTION 4: THE WILLPOWER TAX ---
             item {
                 Column(
-                    modifier = elasticMod(3)
+                    modifier = elasticMod(4)
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)
                 ) {
@@ -1409,7 +1472,7 @@ fun BehaviorScreen(
             // --- SECTION 5: PHYSIOLOGY & VELOCITY ---
             item {
                 Column(
-                    modifier = elasticMod(4)
+                    modifier = elasticMod(5)
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 40.dp)
                 ) {

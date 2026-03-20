@@ -80,6 +80,7 @@ fun parseVoiceInput(
     defaultTime: String
 ): Triple<String, String, String> {
     val lower = spokenText.lowercase()
+
     val type = when {
         "breakfast" in lower -> "Breakfast"
         "lunch" in lower -> "Lunch"
@@ -190,7 +191,34 @@ fun FoodTrackerScreen(
     val shieldCount by context.dataStore.data.map { it[SHIELD_COUNT_KEY] ?: 0 }.collectAsState(0)
     val lastEvaluatedDateStr by context.dataStore.data.map { it[LAST_EVALUATED_DATE_KEY] ?: "" }.collectAsState("")
 
-    // --- V8.0: ADAPTIVE ADJUDICATOR ---
+    // --- V8.0 ADAPTIVE PROTOCOL BUG FIX (CLAMPING PERFECTS) ---
+    val perfectDays by context.dataStore.data.map { (it[PERFECT_DAYS_KEY] ?: 0) % 6 }.collectAsState(0)
+
+    // --- OTA SILENT BACKGROUND CHECK ---
+    LaunchedEffect(Unit) {
+        if (geminiApiStr.isNotBlank()) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val url = java.net.URL("https://api.github.com/repos/exolon/GryzorFoodTracker/releases/latest")
+                    val connection = url.openConnection() as java.net.HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                    if (connection.responseCode == 200) {
+                        val response = connection.inputStream.bufferedReader().readText()
+                        val json = org.json.JSONObject(response)
+                        val latestTag = json.getString("tag_name")
+                        val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
+                        if (latestVal > 8.0f) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Update $latestTag available! Check Settings to upgrade.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
     LaunchedEffect(lastEvaluatedDateStr, phasePreference) {
         withContext(Dispatchers.IO) {
             val today = LocalDate.now()
@@ -213,7 +241,8 @@ fun FoodTrackerScreen(
                 val prefs = context.dataStore.data.first()
                 var currStreak = prefs[CURRENT_STREAK_KEY] ?: 0
                 var shields = prefs[SHIELD_COUNT_KEY] ?: 0
-                var perfects = prefs[PERFECT_DAYS_KEY] ?: 0
+                // FIX: Clamp legacy variables to prevent 50+ numbers!
+                var perfects = (prefs[PERFECT_DAYS_KEY] ?: 0) % 6
                 var longest = prefs[LONGEST_STREAK_KEY] ?: 0
 
                 var evalDate = lastEval.plusDays(1)
@@ -222,12 +251,10 @@ fun FoodTrackerScreen(
                     val metric = dao.getMetricsForDate(evalDate.toString()).first()
                     val defVal = metric?.deficit?.toFloatOrNull()
 
-                    // Pull historical tags to check for Adaptive Target intervention
                     val tagsEntity = dao.getTagsForDate(evalDate.toString()).first()
                     val isTactical = tagsEntity?.tags?.contains("Tactical Maintenance") == true
 
                     if (defVal != null) {
-                        // Apply a 250 kcal grace buffer if it's a declared Tactical Maintenance day
                         val cutSuccess = if (isTactical) defVal >= -250f else defVal >= 0f
                         val bulkSuccess = if (isTactical) defVal <= 250f else defVal <= 0f
                         val isSuccess = if (phasePreference == "cut") cutSuccess else bulkSuccess
@@ -244,6 +271,7 @@ fun FoodTrackerScreen(
                             if (shields > 0) {
                                 shields--
                                 currStreak++
+                                perfects = 0 // FIX: Ensure progress resets upon shield burn
                                 if (currStreak > longest) longest = currStreak
                             } else {
                                 currStreak = 0
@@ -254,6 +282,7 @@ fun FoodTrackerScreen(
                         if (shields > 0) {
                             shields--
                             currStreak++
+                            perfects = 0 // FIX: Ensure progress resets upon shield burn
                             if (currStreak > longest) longest = currStreak
                         } else {
                             currStreak = 0
@@ -557,7 +586,8 @@ fun FoodTrackerScreen(
                 var sumP = 0
                 var sumF = 0
                 var sumC = 0
-                val macroRegex = Regex("""\[(\d+)\s*kcal\s*\|\s*(\d+)g\s*P\s*\|\s*(\d+)g\s*F\s*\|\s*(\d+)g\s*C\]""")
+                // --- V8.0 NEGATIVE CALORIE REGEX ---
+                val macroRegex = Regex("""\[(-?\d+)\s*kcal\s*\|\s*(-?\d+)g\s*P\s*\|\s*(-?\d+)g\s*F\s*\|\s*(-?\d+)g\s*C\]""")
 
                 pageEntries.forEach { entry ->
                     val match = macroRegex.find(entry.description)
@@ -800,7 +830,6 @@ fun FoodTrackerScreen(
                                         }
                                     }
 
-                                    // --- V8.0: ADAPTIVE TARGET INTERVENTION ---
                                     val pageFrictionLevel = activeTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
                                     val pageSleepLevel = activeTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
                                     val isPageHighlyStressed = pageFrictionLevel >= 4 || (pageSleepLevel in 1..2)
@@ -872,7 +901,6 @@ fun FoodTrackerScreen(
                                 )
                             ) {
 
-                                // --- V8.0: ADAPTIVE TARGET PERSISTENT CARD ---
                                 val pageFrictionLevel = activeTagsList.find { it.startsWith("Friction:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
                                 val pageSleepLevel = activeTagsList.find { it.startsWith("Sleep:") }?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
                                 val isPageHighlyStressed = pageFrictionLevel >= 4 || (pageSleepLevel in 1..2)
@@ -922,7 +950,6 @@ fun FoodTrackerScreen(
                                     }
                                 }
 
-                                // --- V7.5: SUNDAY EXECUTIVE BRIEF TRIGGER ---
                                 if (isSunday && geminiApiStr.isNotBlank() && !hasBrief) {
                                     item {
                                         var isGeneratingBrief by remember { mutableStateOf(false) }
@@ -935,7 +962,6 @@ fun FoodTrackerScreen(
                                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                     isGeneratingBrief = true
                                                     coroutineScope.launch {
-                                                        // Gather last 7 days of data
                                                         val weekDates = (0..6).map { LocalDate.parse(pageDate).minusDays(it.toLong()).toString() }
                                                         val weekDataBuilder = java.lang.StringBuilder()
 

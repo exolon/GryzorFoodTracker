@@ -280,23 +280,34 @@ fun SettingsScreen(
     if (showManual) {
         val manualSections = listOf(
             ManualSection(
-                title = "The Capture Engine",
-                content = "• AI Auto-Macros: Type your meal in plain English. The AI calculates macros and attaches them instantly.\n• Voice Input: Hold the Mic button and speak naturally.\n• Gestures: Swipe left to delete, right to duplicate. The 'Predictive Back' gesture physically scales dialogs as you swipe.\n\nTakeaway:\n• By removing data-entry friction, you preserve cognitive bandwidth for actual decision making.",
-                academicInsight = "Reduces System 2 cognitive load (Kahneman, 2011)."
+                title = "The Gryzor Philosophy",
+                content = "Gryzor is not a standard fitness tracker. It is a behavioral copilot designed to manage 'Ego Depletion.' It assumes that your discipline is a finite resource that is drained by stress and lack of sleep. Gryzor’s job is to protect your psychology, not just count your calories.",
+                academicInsight = "Based on the Fogg Behavior Model (B=MAP) and Ego Depletion theory (Baumeister, 1998)."
             ),
             ManualSection(
-                title = "The Active Compass",
-                content = "• Salvage My Day: If you exceed your target, tap the AI wand to generate a high-satiety rescue meal to pull your trajectory back into the green.\n• Executive Brief: Tap the glowing AI card on Sundays. The system reads your 7-day data and outputs a strategic review.\n• Adaptive Targets: High friction or poor sleep triggers a 'Tactical Maintenance' authorization. Accept it to set your target to 0, protecting your streak.\n\nTakeaway:\n• Rigid systems break. Adaptive flexibility prevents the 'what-the-hell' binge effect.",
-                academicInsight = "Mitigates the Abstinence Violation Effect (Marlatt & Gordon, 1985)."
+                title = "1. Morning Intent & Ambient Auras",
+                content = "Every morning, establish your baseline. Log your 'Cognitive Load' (Friction 1-5) and 'Sleep Quality'. \n\n• If Friction is 4-5, the background 'Aura' will breathe faster and turn red, signaling systemic stress.\n• High friction days automatically trigger 'Tactical Maintenance' prompts to save your streak from burnout.",
+                academicInsight = "Establishes 'Implementation Intentions' (Gollwitzer, 1999) to prime the brain for the day."
             ),
             ManualSection(
-                title = "The Context Layer",
-                content = "• Morning Intent: Log your Cognitive Load and Sleep Quality to establish a daily baseline.\n• Shield Economy: Every 6 perfect days earns a Shield (max 3). Missing a target consumes a Shield instead of breaking your momentum.\n• Ambient Auras: The UI physically 'breathes' based on your systemic stress levels.\n\nTakeaway:\n• Gamified slack prevents habit abandonment when life gets chaotic."
+                title = "2. Zero-Friction Logging (Food & Kinetic)",
+                content = "Gryzor uses a dual-purpose AI parser. \n\n• Food: Type '2 eggs and a coffee.' Gemini calculates the macros and appends a pill.\n• Kinetic: Type '45m of Internal Watts' or 'Push ups.' The AI estimates the burn and appends a negative calorie pill (e.g. -400 kcal). This mathematically grants you the recovery fuel you need for that day.",
+                academicInsight = "Reduces 'Interaction Cost' to maintain long-term habit adherence."
             ),
             ManualSection(
-                title = "Analytics & Export",
-                content = "• Trailing Signals: Toggle 'Signal' on graphs to view your 7-day moving average, filtering out daily scale noise.\n• Behavioral Matrices: Track your caloric success rate strictly against the context tags you apply.\n• Macro-Satiety Matrix: The AI parses your historical meals to prove how High vs Low Protein days affect your caloric compliance.\n• Executive Report: Export a high-fidelity PDF Tear-Sheet.\n\nTakeaway:\n• Move from guessing why you failed, to mathematically proving how you succeed.",
-                academicInsight = "Visualizes the Satiety Index in real-time (Holt et al., 1995)."
+                title = "3. The Active Compass (Sunday Briefs & Rescue)",
+                content = "Gryzor proactively intervenes to prevent failure.\n\n• Salvage My Day: If you exceed your target, the AI generates a high-satiety rescue meal based on your recent palate.\n• Sunday Executive Brief: Every Sunday, tap the AI card for a 7-day trailing behavioral review to identify blind spots (e.g., 'Your compliance drops when Sleep is Level 2').",
+                academicInsight = "Leverages the 'Fresh Start Effect' (Milkman, 2013) for weekly resets."
+            ),
+            ManualSection(
+                title = "4. The Shield Economy",
+                content = "To prevent the 'What-The-Hell' effect (giving up entirely after one slip), Gryzor uses armor. Every 6 perfect days earns you 1 Shield (max 3). If you miss a target, a Shield is consumed automatically to protect your momentum and keep your streak alive.",
+                academicInsight = "Mitigates the Abstinence Violation Effect (Marlatt, 1985)."
+            ),
+            ManualSection(
+                title = "5. Advanced Analytics & VIX",
+                content = "• Intake VIX: Measures the volatility (Standard Deviation) of your eating. High VIX (>300) indicates erratic patterns.\n• Macro-Satiety Matrix: Proves mathematically how High vs Low protein days impact your Win Rate.\n• Trailing Signals: Toggle 'Signal' on any graph to see your 7-day weighted moving average, filtering out daily water weight noise.",
+                academicInsight = "Uses signal processing to separate metabolic signal from scale noise."
             )
         )
 
@@ -305,7 +316,7 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 showManual = false
             },
-            title = { Text(text = "App Manual (v8.0)") },
+            title = { Text(text = "App Manual (v8.5)") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(manualSections) { section ->
@@ -331,7 +342,8 @@ fun SettingsScreen(
                                     Text(
                                         text = section.title,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.weight(1f)
                                     )
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
@@ -353,7 +365,7 @@ fun SettingsScreen(
                                                 shape = RoundedCornerShape(8.dp)
                                             ) {
                                                 Text(
-                                                    text = "Insight: ${section.academicInsight}",
+                                                    text = section.academicInsight,
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.secondary,
                                                     modifier = Modifier.padding(8.dp)
@@ -388,21 +400,12 @@ fun SettingsScreen(
             text = {
                 LazyColumn {
                     val logs = listOf(
-                        "v8.0" to "The Adaptive Intelligence Update: Introduced the Adaptive Target Protocol (Tactical Maintenance authorizations on high friction days with a 250kcal grace buffer) and the Macro-Satiety Matrix (parsing historical AI meal tags to correlate Protein volume against Win Rates).",
-                        "v7.51" to "The Clarity Pass: Added Target Fat %. Upgraded Body Composition graph with a 7-day trailing signal overlay and a crisp UI separator. Refined card animation physics to reduce visual noise. Updated API key visual security flow.",
-                        "v7.5" to "The Intelligence Update: Shifted focus from tactical tracking to macro-intelligence. Built the 'Sunday Executive Brief' Macro-AI for automated weekly strategic reviews. Injected the 'Biological & Cognitive Constraints Matrix' to visualize the direct correlation between physical/mental fatigue and dietary compliance.",
-                        "v7.0" to "The Resilience Engine: Built an active gamified micro-economy to prevent the 'Abstinence Violation Effect'. Every 6 perfect days earns a Shield (max 3) which automatically protects your momentum if you miss a target. Added dismissible UI cards for AI Rescue Strategies.",
-                        "v6.0" to "The Active Compass Pass: Transformed Gryzor into a proactive behavioral copilot. Added a 'Salvage My Day' AI magic wand to generate hyper-specific, context-aware rescue meals when deficits slip. Introduced a Predictive Habit Engine (WorkManager) that analyzes your 7-day logging patterns and sends actionable Android notifications to 1-tap log or edit your most frequent meals.",
-                        "v5.3" to "The UI Polish Pass: Converted macro strings into visual UI pills. Rebuilt AddMealDialog into a pure full-screen Compose Box to perfectly support predictive back-scaling.",
-                        "v5.2" to "The Automation Pass: Integrated Gemini AI to automatically calculate Macros directly into the Meal text string. Added a Regex parser to dynamically sum Daily AI Totals.",
-                        "v5.1" to "The Predictive Back Pass: Upgraded NavHost to support Compose Navigation native predictive back-swipes, giving users a continuous spatial preview when navigating.",
-                        "v5.0" to "The Executive Report: Built a high-fidelity HTML-to-PDF rendering engine for exporting premium, printable 30-day Tear-Sheets featuring pure SVG vector charts.",
-                        "v4.9" to "The Visceral Pass: Introduced Ambient State Auras for metabolic breathing, Bioluminescent Heatmaps for streak momentum.",
-                        "v4.8" to "The Tactile & Context Pass: Added continuous haptic data scrubbing to canvases with Relative Tooltips.",
-                        "v4.7" to "The Signal vs. Noise Pass: Upgraded Analytics to 31-day horizons with a Trailing 7-Day Average signal overlay. Built OTA GitHub updater.",
-                        "v4.0" to "The Behavioral Pass: Introduced the Behavioral Engine with Predictive Degradation, Intake VIX, Fuel ROI.",
-                        "v3.0" to "The Context Pass: Expanded application beyond simple tracking. Introduced customizable Context Tags.",
-                        "v2.0" to "The Capture Pass: Vastly reduced friction. Introduced the AI Voice Parsing engine.",
+                        "v8.5" to "The Kinetic Update: Integrated exercise deduction logic via AI (log workouts as negative calories). Added the Kinetic Output Heatmap to the Behavioral Engine. Full documentation rewrite. Automatic OTA version checking on launch.",
+                        "v8.0" to "The Adaptive Intelligence Update: Introduced Adaptive Target Protocol (Tactical Maintenance) and the Macro-Satiety Matrix (parsing historical AI meal tags).",
+                        "v7.51" to "The Clarity Pass: Added Target Fat %. Upgraded Body Composition graph with a 7-day trailing signal overlay and refined motion physics.",
+                        "v7.5" to "The Intelligence Update: Sunday Executive Brief (Macro-AI) and Biological & Cognitive Constraints Matrix.",
+                        "v7.0" to "The Resilience Engine: Built the Shield Economy and Streak Protection.",
+                        "v6.0" to "The Active Compass: Added 'Salvage My Day' AI and Predictive Habit notifications.",
                         "v1.0" to "Initial Release: The baseline architecture."
                     )
                     items(logs) { (version, notes) ->
@@ -1124,7 +1127,7 @@ fun SettingsScreen(
                                                 }
                                             }
 
-                                            val currentVersion = "8.0"
+                                            val currentVersion = "8.5"
                                             val latestVal = latestTag.replace("v", "").toFloatOrNull() ?: 0f
                                             val currentVal = currentVersion.replace("v", "").toFloatOrNull() ?: 0f
 
@@ -1266,7 +1269,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "v8.0",
+                        text = "v8.5",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                     )
